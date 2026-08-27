@@ -137,4 +137,6 @@ Active development. Geometric coverage, heatmaps, and cable paths are **design a
 
 No license file in this repository yet. Treat as source-available for portfolio review unless a license is added.
 
+---
 
+## Managed By: Abishek Budihal
