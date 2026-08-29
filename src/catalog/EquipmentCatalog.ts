@@ -80,6 +80,8 @@ export interface PhysicalSpec {
   height: number;
   depth: number;
   weightKg?: number;
+  /** Typical power consumption in watts. Omit when unknown — never invent. */
+  powerWatts?: number;
 }
 
 export interface DisplaySpec {
