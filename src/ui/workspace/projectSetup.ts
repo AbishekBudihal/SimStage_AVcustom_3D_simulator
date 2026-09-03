@@ -10,7 +10,7 @@ import {
   type DesignUseCase
 } from '../../autodesign/DesignRequirements';
 
-export type ShellNav = 'project' | 'design' | 'system' | 'simulate' | 'validate';
+export type ShellNav = 'project' | 'design' | 'system' | 'simulate' | 'validate' | 'docs';
 
 export type UiComplexity = 'beginner' | 'pro';
 
@@ -78,10 +78,11 @@ export function requirementsFromSetup(input: {
   };
 }
 
-export function shellNavForWorkspace(mode: 'design' | 'system' | 'simulate' | 'validate', designTool: 'room' | 'seating' | 'catalog'): ShellNav {
+export function shellNavForWorkspace(mode: 'design' | 'system' | 'simulate' | 'validate' | 'docs', designTool: 'room' | 'seating' | 'catalog'): ShellNav {
   if (mode === 'system') return 'system';
   if (mode === 'simulate') return 'simulate';
   if (mode === 'validate') return 'validate';
+  if (mode === 'docs') return 'docs';
   return designTool === 'room' ? 'project' : 'design';
 }
 

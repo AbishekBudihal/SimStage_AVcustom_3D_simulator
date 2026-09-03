@@ -7,6 +7,7 @@
 import type { AppState } from '../../app/AppState';
 import { lastValidationDelta, validationReportFor } from '../../av/validation/validationCache';
 import { priorityFor, type ValidationFinding } from '../../av/validation/ValidationTypes';
+import { renderDesignHealthSummary } from './DesignHealthPanel';
 
 export function renderValidationPanel(container: HTMLElement, state: AppState): void {
   container.innerHTML = '';
@@ -40,6 +41,11 @@ export function renderValidationPanel(container: HTMLElement, state: AppState): 
     </div>
   `;
   container.appendChild(summary);
+
+  // Design Health score and per-subsystem breakdown
+  const healthHost = document.createElement('div');
+  container.appendChild(healthHost);
+  renderDesignHealthSummary(healthHost, state);
 
   if (delta?.message) {
     const d = document.createElement('div');

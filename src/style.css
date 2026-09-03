@@ -575,3 +575,31 @@ button:focus-visible, input:focus-visible, select:focus-visible, .nav-item:focus
 .analysis-legend-hud { max-width: min(280px, calc(100% - 24px)); }
 .panel-left.beginner .tree-view-btn { display: none; }
 
+/* ── Documentation Panel ── */
+.doc-body { padding: 8px 12px; overflow-y: auto; max-height: calc(100vh - 220px); }
+.doc-summary { font-size: 11px; color: var(--text-secondary); padding: 6px 0; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+.doc-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+.doc-table th { text-align: left; font-weight: 600; font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-tertiary); padding: 4px 6px; border-bottom: 1px solid var(--border); }
+.doc-table td { padding: 4px 6px; border-bottom: 1px solid var(--bg-panel-alt); color: var(--text-primary); }
+.doc-table tr:hover td { background: var(--bg-panel-alt); }
+.doc-table .custom-device-row td { font-style: italic; }
+.doc-report-pre { font-family: "Cascadia Code", "Fira Code", "Consolas", monospace; font-size: 10px; line-height: 1.5; padding: 12px; background: var(--bg-panel-alt); border: 1px solid var(--border); border-radius: 4px; white-space: pre-wrap; overflow-y: auto; max-height: calc(100vh - 280px); color: var(--text-primary); }
+
+/* ── Custom Device Panel ── */
+.custom-device-panel { padding: 8px 12px; }
+.form-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 11px; }
+.form-label { min-width: 100px; color: var(--text-secondary); font-size: 10px; }
+.form-input { flex: 1; padding: 4px 6px; border: 1px solid var(--border); border-radius: 3px; font-size: 11px; background: var(--bg-panel); color: var(--text-primary); font-family: var(--font); }
+.form-input:focus { border-color: var(--accent); outline: none; }
+.port-editor-row { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; flex-wrap: wrap; }
+.port-field-sm .form-label { min-width: 30px; font-size: 9px; }
+.port-field-sm .form-input { max-width: 80px; font-size: 10px; }
+.custom-device-errors { font-size: 10px; padding: 6px 0; min-height: 20px; }
+.custom-device-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+
+/* ── Sub-tabs (shared) ── */
+.sub-tabs { display: flex; gap: 2px; padding: 4px 8px; border-bottom: 1px solid var(--border); }
+.sub-tab { background: none; border: none; border-bottom: 2px solid transparent; padding: 4px 10px; font-size: 10px; font-weight: 500; color: var(--text-tertiary); cursor: pointer; font-family: var(--font); }
+.sub-tab:hover { color: var(--text-primary); }
+.sub-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+

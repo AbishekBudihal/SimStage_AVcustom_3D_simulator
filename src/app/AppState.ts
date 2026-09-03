@@ -22,7 +22,7 @@ import {
   type TablePresetId
 } from '../room/ParametricTable';
 import type { AVRack } from '../av/AVRack';
-import { usedRackUnits } from '../av/AVRack';
+import { usedRackUnits, defaultFloorRack, defaultWallRack } from '../av/AVRack';
 import { snapSeatPosition } from '../interaction/SnapEngine';
 import type { AlignmentGuide } from '../interaction/CadSnap';
 import type { EquipmentInstance, PlacementMode } from '../catalog/EquipmentCatalog';
@@ -49,6 +49,30 @@ import {
 } from '../ui/workspace/projectSetup';
 
 const catalog = loadDefaultCatalog();
+
+/** Find the lowest RU position where a device of `units` RU can fit without overlapping. */
+function nextFreeRU(
+  rack: import('../av/AVRack').AVRack,
+  units: number,
+  others: Array<{ rackPositionRU?: number; rackUnits?: number }>
+): number {
+  const occupied = new Set<number>();
+  for (const o of others) {
+    const start = o.rackPositionRU ?? 0;
+    const height = o.rackUnits ?? 0;
+    if (start > 0 && height > 0) {
+      for (let u = start; u < start + height; u++) occupied.add(u);
+    }
+  }
+  for (let pos = 1; pos <= rack.ruTotal - units + 1; pos++) {
+    let fits = true;
+    for (let u = pos; u < pos + units; u++) {
+      if (occupied.has(u)) { fits = false; break; }
+    }
+    if (fits) return pos;
+  }
+  return 1;
+}
 
 export type WorkflowStep =
   | 'project'
@@ -235,7 +259,7 @@ export class AppState {
     detailsOpen: false
   };
 
-  workspaceMode: 'design' | 'system' | 'simulate' | 'validate' = 'design';
+  workspaceMode: 'design' | 'system' | 'simulate' | 'validate' | 'docs' = 'design';
   /** Primary chrome tab. View state — not undo. */
   shellNav: ShellNav = 'project';
   uiComplexity: UiComplexity = 'beginner';
@@ -252,6 +276,8 @@ export class AppState {
   };
   /** Design-mode left panel: room / seating / catalog. View state, not undo. */
   designTool: 'room' | 'seating' | 'catalog' = 'room';
+  /** System-mode left panel sub-tab. View state, not undo. */
+  systemPanelTab: 'library' | 'cables' = 'library';
   /** Extra equipment ids when shift-selecting. View/session, not undo. */
   additionalSelectedIds: string[] = [];
   /** Viewport hide — view state, not undo. */
@@ -423,6 +449,19 @@ export class AppState {
     this.notify();
   }
 
+  addDefaultRack(kind: 'floor' | 'wall' = 'floor'): AVRack {
+    this.recordAndReset();
+    const id = `av-rack-${this.racks.length + 1}`;
+    const rack = kind === 'wall' ? defaultWallRack(id) : defaultFloorRack(id);
+    if (this.room) {
+      rack.x = Number((this.room.width / 2 - rack.width / 2 - 0.2).toFixed(2));
+      rack.z = Number((this.room.depth / 2 - rack.depth / 2 - 0.2).toFixed(2));
+    }
+    this.racks = [...this.racks, rack];
+    this.notify();
+    return rack;
+  }
+
   updateRack(id: string, patch: Partial<AVRack>, options: { recordHistory?: boolean } = {}): void {
     if (options.recordHistory !== false) this.recordAndReset();
     const idx = this.racks.findIndex((r) => r.id === id);
@@ -447,10 +486,11 @@ export class AppState {
         return;
       }
     }
+    const nextRU = rack && units ? nextFreeRU(rack, units, this.equipment.filter((e) => e.rackId === rack.id && e.instanceId !== instanceId)) : undefined;
     this.updateEquipment(instanceId, {
       rackId: rackId ?? undefined,
       rackUnits: units,
-      rackPositionRU: rack && units ? usedRackUnits(this.equipment.filter((e) => e.rackId === rack.id && e.instanceId !== instanceId)) + 1 : undefined
+      rackPositionRU: nextRU
     });
   }
 
@@ -711,6 +751,11 @@ export class AppState {
     if (tool === 'catalog') this.step = 'equipment';
     this.workspaceMode = 'design';
     this.shellNav = tool === 'room' ? 'project' : 'design';
+    this.notify();
+  }
+
+  setSystemPanelTab(tab: 'library' | 'cables'): void {
+    this.systemPanelTab = tab;
     this.notify();
   }
 
@@ -984,7 +1029,7 @@ export class AppState {
     this.notify();
   }
 
-  setWorkspaceMode(mode: 'design' | 'system' | 'simulate' | 'validate'): void {
+  setWorkspaceMode(mode: 'design' | 'system' | 'simulate' | 'validate' | 'docs'): void {
     this.workspaceMode = mode;
     this.shellNav = shellNavForWorkspace(mode, this.designTool);
     if (mode === 'simulate') this.step = 'simulation';
@@ -1017,6 +1062,9 @@ export class AppState {
     } else if (tab === 'simulate') {
       this.workspaceMode = 'simulate';
       this.step = 'simulation';
+    } else if (tab === 'docs') {
+      this.workspaceMode = 'docs';
+      this.step = 'analysis';
     } else {
       this.workspaceMode = 'validate';
       this.step = 'analysis';

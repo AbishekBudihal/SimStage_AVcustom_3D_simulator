@@ -95,8 +95,9 @@ export function renderSystemCanvas(container: HTMLElement, state: AppState): voi
     svg.appendChild(t);
   });
 
-  state.connections.forEach((c) => {
+  state.connections.forEach((c, cIdx) => {
     if (hiddenIds.has(c.fromInstanceId) || hiddenIds.has(c.toInstanceId)) return;
+    const cableId = `C-${String(cIdx + 1).padStart(3, '0')}`;
     const muted = state.systemFilter !== 'all' && c.signalType !== state.systemFilter;
     const a = portAnchor(state, c.fromInstanceId, c.fromPortId, 'out');
     const b = portAnchor(state, c.toInstanceId, c.toPortId, 'in');
@@ -107,7 +108,7 @@ export function renderSystemCanvas(container: HTMLElement, state: AppState): voi
     path.setAttribute('class', `sys-wire sig-${c.signalType}${muted ? ' muted' : ''}${sel ? ' selected' : ''}`);
     path.setAttribute(
       'title',
-      `${c.signalType} · ${labelPort(state, c.fromInstanceId, c.fromPortId)} → ${labelPort(state, c.toInstanceId, c.toPortId)} · Transport ${c.transport} · ${c.physicalMedium}`
+      `${cableId} | ${c.signalType} · ${labelPort(state, c.fromInstanceId, c.fromPortId)} → ${labelPort(state, c.toInstanceId, c.toPortId)} · Transport ${c.transport} · ${c.physicalMedium}`
     );
     path.onclick = (ev) => {
       ev.stopPropagation();
@@ -119,7 +120,7 @@ export function renderSystemCanvas(container: HTMLElement, state: AppState): voi
       t.setAttribute('x', String((a.x + b.x) / 2));
       t.setAttribute('y', String((a.y + b.y) / 2 - 6));
       t.setAttribute('class', 'sys-wire-label');
-      t.textContent = state.systemDetailMode === 'beginner' ? c.physicalMedium : `${c.physicalMedium} · ${c.signalType}`;
+      t.textContent = state.systemDetailMode === 'beginner' ? `${cableId} ${c.physicalMedium}` : `${cableId} ${c.physicalMedium} · ${c.signalType}`;
       svg.appendChild(t);
     }
   });
@@ -312,6 +313,7 @@ function renderNode(state: AppState, instanceId: string): SVGGElement {
   addText(g, '12', '30', 'sys-node-title', inst.name.slice(0, 26));
   addText(g, '12', '44', 'sys-node-cat', (product?.category ?? 'device').toUpperCase());
   if (inst.rackId) addText(g, '140', '44', 'sys-node-sub', `RACK ${inst.rackId}`);
+  if (product?.provenance === 'user_defined') addText(g, '140', '14', 'sys-node-sub', '★ CUSTOM');
   if (!ports.length) addText(g, '12', '64', 'sys-node-warn', 'DATA INCOMPLETE');
 
   if (state.systemCanvasMode !== 'schematic') {

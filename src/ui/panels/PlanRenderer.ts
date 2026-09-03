@@ -14,7 +14,7 @@ import type { HeatmapImage } from '../../av/HeatmapEngine';
 import { contourPolylines, fieldFromCells } from '../../av/simulation/SpatialField';
 import { loadDefaultCatalog } from '../../catalog/loadCatalog';
 import type { CheckStatus } from '../../av/ViewingDistanceEngine';
-import { seatForward } from '../../room/RoomGeometry';
+import { seatForward, presentationRotation } from '../../room/RoomGeometry';
 import { snapEquipment, snapSeatPosition, snapTablePosition } from '../../interaction/SnapEngine';
 import { rackServiceAabb } from '../../av/AVRack';
 import {
@@ -478,6 +478,12 @@ export function renderPlanView(container: HTMLElement, state: AppState): void {
     const g = svgEl('g', { class: 'plan-equipment' });
     g.style.cursor = 'grab';
 
+    const rotY = inst.rotationY !== undefined ? inst.rotationY : (inst.wall ? presentationRotation(inst.wall) : 0);
+    const rotDeg = -rotY * (180 / Math.PI);
+    if (Math.abs(rotDeg) > 0.01) {
+      g.setAttribute('transform', `rotate(${rotDeg.toFixed(2)}, ${px}, ${pz})`);
+    }
+
     let hitTarget: SVGGraphicsElement;
     const wPx = Math.max(6, (product.physical.width || 0.12) * PX_PER_M);
     const dPx = Math.max(6, (product.physical.depth || 0.12) * PX_PER_M);
@@ -491,6 +497,16 @@ export function renderPlanView(container: HTMLElement, state: AppState): void {
         stroke: isSelected ? '#2f8cff' : '#000',
         'stroke-width': isSelected ? 3 : 1
       });
+      // Screen face accent (front +Z edge)
+      const screenAccent = svgEl('line', {
+        x1: px - wPx / 2 + 1,
+        y1: pz + 4,
+        x2: px + wPx / 2 - 1,
+        y2: pz + 4,
+        stroke: '#58a6ff',
+        'stroke-width': 2
+      });
+      g.appendChild(screenAccent);
     } else if (product.category === 'camera') {
       hitTarget = svgEl('polygon', {
         points: `${px},${pz - 8} ${px + 7},${pz + 6} ${px - 7},${pz + 6}`,
@@ -577,6 +593,7 @@ function enablePlanDrag(
   let startSvgY = 0;
   let lastSvgX = 0;
   let lastSvgY = 0;
+  const initialTransform = group.getAttribute('transform') || '';
 
   const clientToSvg = (clientX: number, clientY: number): { x: number; y: number } => {
     const pt = svg.createSVGPoint();
@@ -595,14 +612,18 @@ function enablePlanDrag(
     lastSvgY = cur.y;
     const dx = lastSvgX - startSvgX;
     const dy = lastSvgY - startSvgY;
-    group.setAttribute('transform', `translate(${dx} ${dy})`);
+    group.setAttribute('transform', `translate(${dx} ${dy}) ${initialTransform}`.trim());
   };
 
   const onUp = (): void => {
     if (!dragging) return;
     dragging = false;
     group.style.cursor = 'grab';
-    group.removeAttribute('transform');
+    if (initialTransform) {
+      group.setAttribute('transform', initialTransform);
+    } else {
+      group.removeAttribute('transform');
+    }
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
 

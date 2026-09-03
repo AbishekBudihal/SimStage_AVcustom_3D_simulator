@@ -507,6 +507,43 @@ export const checkConnRouteUnavailable: ValidationCheck = {
   }
 };
 
+export const checkDisconnectedEquipment: ValidationCheck = {
+  code: 'SYSTEM-006',
+  category: 'system',
+  title: 'Disconnected equipment',
+  evaluate(ctx): ValidationFinding[] {
+    if (!systemGraphActive(ctx)) return [];
+    const out: ValidationFinding[] = [];
+    for (const inst of ctx.equipment) {
+      const product = ctx.catalog.get(inst.productId);
+      if (!product) continue;
+      const cat = product.category;
+      if (!(SYSTEM_ROLE_CATEGORIES as readonly string[]).includes(cat)) continue;
+      const hasAny = ctx.connections.some(
+        (c) => c.fromInstanceId === inst.instanceId || c.toInstanceId === inst.instanceId
+      );
+      if (!hasAny) {
+        out.push(
+          finding({
+            id: `SYSTEM-006-${inst.instanceId}`,
+            code: 'SYSTEM-006',
+            severity: 'warning',
+            category: 'system',
+            title: 'Equipment has no connections',
+            message: `${inst.name} (${cat}) is in the design but has no system connections.`,
+            explanation: 'System-role equipment should participate in the signal graph. If intentionally standalone, this can be dismissed.',
+            objectId: inst.instanceId,
+            affectedObjects: [{ kind: 'equipment', id: inst.instanceId, label: inst.name }],
+            recommendedActions: ['Connect the device in System view', 'Remove it if not needed'],
+            source: 'System topology'
+          })
+        );
+      }
+    }
+    return out;
+  }
+};
+
 export const SYSTEM_CHECKS: ValidationCheck[] = [
   checkPortsIncomplete,
   checkSignalDirection,
@@ -519,5 +556,6 @@ export const SYSTEM_CHECKS: ValidationCheck[] = [
   checkAmpSpeakerOut,
   checkConnMissingEndpoint,
   checkConnCableType,
-  checkConnRouteUnavailable
+  checkConnRouteUnavailable,
+  checkDisconnectedEquipment
 ];

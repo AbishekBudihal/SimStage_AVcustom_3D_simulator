@@ -84,6 +84,19 @@ export interface PhysicalSpec {
   powerWatts?: number;
 }
 
+export interface PowerSpec {
+  /** Operating power consumption in watts */
+  powerWatts?: number;
+  /** Operating voltage in volts (AC or DC) */
+  voltage?: number;
+  /** Operating current in amperes */
+  currentAmps?: number;
+  /** PoE classification (e.g. 'PoE', 'PoE+ (30W)', 'PoE++ (60W)', 'PoE++ (90W)') */
+  poeClass?: string;
+  /** Standby / idle power consumption in watts */
+  idleWatts?: number;
+}
+
 export interface DisplaySpec {
   diagonalInches: number;
   resolution: string;
@@ -149,12 +162,18 @@ export interface EquipmentProduct {
   id: string;
   manufacturer: string;
   model: string;
+  /** Optional manufacturer part number (SKU) */
+  partNumber?: string;
+  /** Optional customer-facing product name if different from model */
+  productName?: string;
   category: EquipmentCategory;
   type: string;
   /** Optional identity copy. Omit rather than invent marketing text. */
   description?: string;
   family?: string;
   physical: PhysicalSpec;
+  /** Optional electrical / power specifications */
+  power?: PowerSpec;
   display?: DisplaySpec;
   speaker?: SpeakerSpec;
   microphone?: MicrophoneSpec;

@@ -213,10 +213,11 @@ export class SceneManager {
       this.attachTransformToSelection();
     }
 
-    if (racksSig !== this.lastRacksSignature || selectionSig !== this.lastSelectionSignature) {
+    if (racksSig !== this.lastRacksSignature || selectionSig !== this.lastSelectionSignature || equipSig !== this.lastEquipSignature) {
       const selectedRackId = this.state.selection.kind === 'rack' ? this.state.selection.id : null;
+      const selectedEquipForRack = this.state.selection.kind === 'equipment' ? this.state.selection.id : null;
       while (this.rackGroup.children.length) this.rackGroup.remove(this.rackGroup.children[0]);
-      this.rackGroup.add(renderRacks(this.state.racks, selectedRackId));
+      this.rackGroup.add(renderRacks(this.state.racks, this.state.equipment, catalog, selectedRackId ?? selectedEquipForRack));
     }
 
     this.lastSeatsSignature = seatsSig;
@@ -521,6 +522,21 @@ export class SceneManager {
         },
         { recordHistory: false }
       );
+      return;
+    }
+
+    if (this.state.transformMode === 'rotate') {
+      const rotY = this.selectedMesh.rotation.y;
+      this.state.updateEquipment(
+        id,
+        {
+          rotationY: rotY,
+          placementMode: 'manual'
+        },
+        { recordHistory: false }
+      );
+      this.state.setSnapNote(`Rotated to ${((rotY * 180) / Math.PI).toFixed(1)}°`);
+      this.state.finishGesture();
       return;
     }
 

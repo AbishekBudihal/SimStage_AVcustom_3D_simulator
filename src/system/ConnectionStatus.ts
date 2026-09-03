@@ -4,6 +4,7 @@
 
 import type { EquipmentCatalog, EquipmentInstance } from '../catalog/EquipmentCatalog';
 import type { ValidationFinding } from '../av/validation/ValidationTypes';
+import { resolveProductPorts } from './PortResolver';
 import type {
   ConnectionImportance,
   PortConnectionState,
@@ -33,13 +34,18 @@ export function connectionEndpointStatus(
   connection: SystemConnection,
   equipment: EquipmentInstance[],
   catalog: EquipmentCatalog
-): 'connected' | 'invalid' {
+): 'connected' | 'invalid' | 'unknown' {
   const fromEq = equipment.find((e) => e.instanceId === connection.fromInstanceId);
   const toEq = equipment.find((e) => e.instanceId === connection.toInstanceId);
   if (!fromEq || !toEq) return 'invalid';
+  const fromProduct = catalog.get(fromEq.productId);
+  const toProduct = catalog.get(toEq.productId);
+  if (!fromProduct || !toProduct) return 'invalid';
+  const fromIncomplete = resolveProductPorts(fromProduct).incomplete;
+  const toIncomplete = resolveProductPorts(toProduct).incomplete;
   const from = resolveInstancePorts(fromEq.instanceId, fromEq.productId, catalog).find((p) => p.id === connection.fromPortId);
   const to = resolveInstancePorts(toEq.instanceId, toEq.productId, catalog).find((p) => p.id === connection.toPortId);
-  if (!from || !to) return 'invalid';
+  if (!from || !to) return fromIncomplete || toIncomplete ? 'unknown' : 'invalid';
   return canConnectPorts(from, to).ok ? 'connected' : 'invalid';
 }
 

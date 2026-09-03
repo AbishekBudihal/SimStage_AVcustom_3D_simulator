@@ -9,7 +9,7 @@
 import type { AppState } from './AppState';
 import type { RoomModel } from '../room/RoomModel';
 import type { Seat, TableSpec } from '../room/SeatingGenerator';
-import type { EquipmentInstance } from '../catalog/EquipmentCatalog';
+import type { EquipmentInstance, EquipmentProduct } from '../catalog/EquipmentCatalog';
 import type { SystemConnection, SystemGroup, SystemRoute } from '../system/SystemTypes';
 import { cachedCableRoute, invalidateCableRoutes } from '../system/CableRouter';
 import { cableRouteContext } from '../system/cableContext';
@@ -37,6 +37,8 @@ export interface ProjectFile {
   routes?: SystemRoute[];
   systemGroups?: SystemGroup[];
   systemLayout?: Record<string, { x: number; y: number }>;
+  /** User-created devices embedded in the project for portability. */
+  customDevices?: EquipmentProduct[];
   settings: {
     viewMode: string;
   };
@@ -69,10 +71,26 @@ export function serializeProject(state: AppState): ProjectFile {
     routes: state.routes,
     systemGroups: state.systemGroups,
     systemLayout: state.systemLayout,
+    customDevices: collectCustomDevices(state),
     settings: {
       viewMode: state.viewMode
     }
   };
+}
+
+/** Collect user-created devices referenced by project equipment. */
+function collectCustomDevices(state: AppState): EquipmentProduct[] {
+  const catalog = loadDefaultCatalog();
+  const customIds = new Set<string>();
+  const devices: EquipmentProduct[] = [];
+  for (const inst of state.equipment) {
+    const product = catalog.get(inst.productId);
+    if (product?.provenance === 'user_defined' && !customIds.has(product.id)) {
+      customIds.add(product.id);
+      devices.push(product);
+    }
+  }
+  return devices;
 }
 
 export function downloadProject(state: AppState): void {
@@ -119,6 +137,11 @@ export function loadProjectInto(state: AppState, file: ProjectFile): { ok: true 
     state.systemLayout = JSON.parse(JSON.stringify(file.systemLayout ?? {}));
     state.selection = { kind: 'none', id: null };
     state.selectedConnectionId = null;
+    // Register custom devices from project file into catalog
+    if (file.customDevices?.length) {
+      const cat = loadDefaultCatalog();
+      cat.register(file.customDevices);
+    }
     invalidateCableRoutes();
     state.clearHistory();
     state.notify();

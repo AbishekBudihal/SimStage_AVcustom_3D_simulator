@@ -28,6 +28,8 @@ const micMat = new THREE.MeshStandardMaterial({ color: 0xd8d5cf, roughness: 0.4,
 const cameraMat = new THREE.MeshStandardMaterial({ color: 0x1c1c1e, roughness: 0.3, metalness: 0.6 });
 const genericMat = new THREE.MeshStandardMaterial({ color: 0x8a8478, roughness: 0.6 });
 
+import { isRackRendered } from '../av/RackTransform';
+
 const selectedOutlineMat = new THREE.LineBasicMaterial({ color: 0x2f8cff });
 
 function buildDisplay(widthM: number, heightM: number, depthM: number): THREE.Group {
@@ -124,6 +126,8 @@ export function renderEquipment(
   instances.forEach((inst) => {
     const product = catalog.get(inst.productId);
     if (!product) return;
+    // Rack-mounted equipment is rendered inside the rack by RackRenderer
+    if (isRackRendered(inst)) return;
 
     let mesh: THREE.Group;
     switch (product.category) {
@@ -162,7 +166,7 @@ export function renderEquipment(
     }
 
     mesh.position.set(inst.position.x, inst.position.y, inst.position.z);
-    mesh.rotation.y = inst.wall ? wallYaw(inst.wall) : inst.rotationY;
+    mesh.rotation.y = inst.rotationY !== undefined ? inst.rotationY : (inst.wall ? wallYaw(inst.wall) : 0);
     mesh.userData.instanceId = inst.instanceId;
     mesh.userData.pickable = 'equipment';
     // tag every child mesh too so raycaster intersections (which hit children) resolve to the instance

@@ -28,7 +28,10 @@ export type ConnectorId =
   | 'xlr'
   | 'line-trs'
   | 'phoenix'
-  | 'speakon';
+  | 'speakon'
+  | 'dsub9'
+  | 'bnc'
+  | 'terminal-block';
 export type TransportId =
   | 'hdmi'
   | 'displayport'
@@ -64,6 +67,8 @@ export interface PortDefinition {
   signalTypes: SignalType[];
   connector: ConnectorId;
   transport?: TransportId;
+  /** Optional engineering protocol (e.g. "Dante", "AES67", "NDI", "RS-232", "VISCA") */
+  protocol?: string;
   required?: boolean;
   /** Catalog-only. Defaults to optional when omitted. */
   connectionImportance?: ConnectionImportance;

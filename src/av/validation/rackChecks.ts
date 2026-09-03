@@ -171,4 +171,57 @@ export const checkRackCapacity: ValidationCheck = {
   }
 };
 
-export const RACK_CHECKS: ValidationCheck[] = [checkRackPresent, checkRackClearance, checkRackCapacity];
+export function occupiedRuRanges(
+  equipment: Array<{ instanceId: string; name: string; rackId?: string; rackPositionRU?: number; rackUnits?: number }>,
+  rackId: string
+): Array<{ instanceId: string; name: string; startRU: number; endRU: number }> {
+  return equipment
+    .filter((e) => e.rackId === rackId && e.rackPositionRU && e.rackPositionRU > 0 && e.rackUnits && e.rackUnits > 0)
+    .map((e) => ({
+      instanceId: e.instanceId,
+      name: e.name,
+      startRU: e.rackPositionRU!,
+      endRU: e.rackPositionRU! + e.rackUnits! - 1
+    }));
+}
+
+export const checkRackOverlap: ValidationCheck = {
+  code: 'RACK-004',
+  category: 'rack',
+  title: 'RU overlap',
+  evaluate(ctx: ProjectValidationContext): ValidationFinding[] {
+    const out: ValidationFinding[] = [];
+    for (const rack of ctx.racks) {
+      const ranges = occupiedRuRanges(ctx.equipment, rack.id);
+      for (let i = 0; i < ranges.length; i++) {
+        for (let j = i + 1; j < ranges.length; j++) {
+          const a = ranges[i];
+          const b = ranges[j];
+          if (a.startRU <= b.endRU && b.startRU <= a.endRU) {
+            out.push(
+              finding({
+                id: `RACK-004:${rack.id}:${a.instanceId}:${b.instanceId}`,
+                code: 'RACK-004',
+                severity: 'error',
+                category: 'rack',
+                title: 'Equipment RU positions overlap',
+                message: `${a.name} (U${a.startRU}–U${a.endRU}) overlaps ${b.name} (U${b.startRU}–U${b.endRU}) in ${rack.id}.`,
+                explanation: 'Two devices cannot occupy the same rack unit position.',
+                affectedObjects: [
+                  { kind: 'equipment', id: a.instanceId, label: a.name },
+                  { kind: 'equipment', id: b.instanceId, label: b.name },
+                  { kind: 'rack', id: rack.id, label: rack.id }
+                ],
+                recommendedActions: ['Reassign RU positions', 'Move one device to another rack'],
+                source: 'EquipmentInstance.rackPositionRU + rackUnits'
+              })
+            );
+          }
+        }
+      }
+    }
+    return out;
+  }
+};
+
+export const RACK_CHECKS: ValidationCheck[] = [checkRackPresent, checkRackClearance, checkRackCapacity, checkRackOverlap];

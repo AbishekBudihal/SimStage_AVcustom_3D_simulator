@@ -42,7 +42,7 @@ export function resolveActiveDisplay(equipment: EquipmentInstance[], catalog: Eq
       instance: inst
     };
   }
-  const rotationY = inst.wall ? presentationRotation(inst.wall) : inst.rotationY;
+  const rotationY = inst.rotationY !== undefined ? inst.rotationY : (inst.wall ? presentationRotation(inst.wall) : 0);
   return {
     kind: 'ok',
     product,

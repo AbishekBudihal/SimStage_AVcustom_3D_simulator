@@ -35,6 +35,8 @@ import {
   micEngineeringReady,
   speakerEngineeringReady
 } from '../../autodesign/CatalogCandidates';
+import { loadUserLibrary } from '../../catalog/UserLibrary';
+import { renderCustomDevicePanel } from './CustomDevicePanel';
 
 const catalog = loadDefaultCatalog();
 
@@ -110,6 +112,50 @@ function renderCatalogBrowser(wrap: HTMLElement, state: AppState): void {
     };
     catList.appendChild(item);
   });
+
+  // User Library section
+  const userLib = loadUserLibrary();
+  if (userLib.length > 0) {
+    const userTitle = document.createElement('div');
+    userTitle.className = 'nav-section-title';
+    userTitle.textContent = 'USER LIBRARY';
+    userTitle.style.marginTop = '8px';
+    wrap.appendChild(userTitle);
+    userLib.forEach((p) => {
+      const item = document.createElement('div');
+      item.className = 'nav-item';
+      item.textContent = `★ ${p.manufacturer} ${p.model}`;
+      item.title = p.description ?? p.category;
+      item.onclick = () => {
+        // Register in catalog if not already present
+        if (!catalog.get(p.id)) catalog.register([p]);
+        const id = `eq-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        state.addEquipment({
+          instanceId: id,
+          productId: p.id,
+          name: `${p.manufacturer} ${p.model}`,
+          position: { x: 0, y: 1, z: 0 },
+          rotationY: 0,
+          placementMode: 'manual'
+        });
+        state.select('equipment', id);
+      };
+      wrap.appendChild(item);
+    });
+  }
+
+  // Create Custom Device button
+  const createBtn = document.createElement('button');
+  createBtn.className = 'btn';
+  createBtn.style.margin = '8px 12px';
+  createBtn.style.fontSize = '10px';
+  createBtn.textContent = '+ Create Custom Device';
+  createBtn.onclick = () => {
+    renderCustomDevicePanel(wrap.parentElement!, state, () => {
+      renderEquipmentStep(wrap.parentElement!, state);
+    });
+  };
+  wrap.appendChild(createBtn);
 
   const filterTitle = document.createElement('div');
   filterTitle.className = 'nav-section-title';

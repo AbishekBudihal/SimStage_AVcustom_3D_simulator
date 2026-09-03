@@ -1,4 +1,4 @@
-﻿import type { AppState } from '../../app/AppState';
+import type { AppState } from '../../app/AppState';
 import { loadDefaultCatalog } from '../../catalog/loadCatalog';
 import { snapEquipment } from '../../interaction/SnapEngine';
 import { renderDisplayAnalysisControls } from './DisplayAnalysisPanel';
@@ -20,6 +20,7 @@ import {
 import { getPresentationWall } from '../../room/RoomGeometry';
 import { validationReportFor } from '../../av/validation/validationCache';
 import { usedRackUnits } from '../../av/AVRack';
+import { renderRackScheduleSection } from './RackSchedulePanel';
 import { inspectSeat } from '../../av/SeatInspection';
 import { compatibleDestinations, compatibleSources, canConnectPorts } from '../../system/PortCompatibility';
 import { cachedCableRoute } from '../../system/CableRouter';
@@ -362,34 +363,9 @@ function renderRackInspector(body: HTMLElement, state: AppState, rackId: string)
     state.updateRack(rackId, { rotationY: (v * Math.PI) / 180 })
   );
 
-  const elevTitle = document.createElement('div');
-  elevTitle.className = 'nav-section-title';
-  elevTitle.textContent = 'RACK ELEVATION';
-  body.appendChild(elevTitle);
-  const note = document.createElement('div');
-  note.className = 'badge-note';
-  note.textContent =
-    'Generated from equipment assigned to this rack. RU is never invented from category. Switch to Elevation for the diagram.';
-  body.appendChild(note);
-  assigned.forEach((e) => {
-    const ru = e.rackUnits;
-    metricRow(
-      body,
-      `${e.name}`,
-      ru && ru > 0 ? `U${e.rackPositionRU ?? 'â€”'} Â· ${ru} RU` : 'DATA INCOMPLETE â€” no RU'
-    );
-  });
-  if (!assigned.length) {
-    const empty = document.createElement('div');
-    empty.className = 'badge-note';
-    empty.textContent = `AVAILABLE ${rack.ruTotal} RU`;
-    body.appendChild(empty);
-  } else {
-    const spare = document.createElement('div');
-    spare.className = 'badge-note';
-    spare.textContent = `AVAILABLE ${rack.ruTotal - used} RU`;
-    body.appendChild(spare);
-  }
+  const elevHost = document.createElement('div');
+  body.appendChild(elevHost);
+  renderRackScheduleSection(elevHost, state, rackId);
 
   const del = document.createElement('button');
   del.className = 'btn';

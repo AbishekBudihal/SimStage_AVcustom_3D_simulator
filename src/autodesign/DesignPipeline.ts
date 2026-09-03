@@ -10,6 +10,7 @@ import { type DesignRequirements } from './DesignRequirements';
 import { resolveSeatingLayout } from '../room/SeatingStrategy';
 import { tableAabb, chairAabb } from '../room/FurnitureGeometry';
 import { placeAvRack } from '../av/RackPlacement';
+import { evaluateRackRequirement } from '../av/RackRequirement';
 import { splitDivisibleZones } from '../room/RoomZones';
 import { snapCeilingMounted, displayOverlapsOpening } from '../interaction/SnapEngine';
 import { getPresentationWall, wallMountPoint, computeWallCandidates, presentationRotation, type WallKey } from '../room/RoomGeometry';
@@ -537,12 +538,12 @@ export function generateDesign(
     ...seating.tables.map((t) => tableAabb(t)),
     ...seating.seats.map((s) => chairAabb(s))
   ]);
-  const racks = [rackPlace.rack];
+  const defaultRack = rackPlace.rack;
   stages.push({
     id: 'rack',
-    title: 'Place AV rack',
+    title: 'Evaluate AV rack requirement',
     status: rackPlace.ok ? 'done' : 'warning',
-    detail: rackPlace.note
+    detail: 'Requirement evaluated per option based on centralized backend equipment'
   });
   stages.push({
     id: 'seating',
@@ -675,7 +676,6 @@ export function generateDesign(
         `${layoutPretty(seating.layout)} layout selected because the project requires ${r.seating.count} participants and ${r.useCase.replace('_', ' ')}.`
       );
     }
-    why.push(`AV rack: ${rackPlace.note}`);
 
     if (skip(existing.display) || (keepEq && existingDisplays.length)) {
       equipment.push(...existingDisplays);
@@ -788,7 +788,19 @@ export function generateDesign(
       needSwitching,
       needDsp: needDsp || equipment.some((e) => catalog.get(e.productId)?.category === 'speaker')
     });
-    const allEq = assignKnownRuToRack([...equipment, ...topo.extraEquipment], racks[0], catalog);
+    const rawEquipment = [...equipment, ...topo.extraEquipment];
+    const rackReq = evaluateRackRequirement(rawEquipment, catalog);
+    let optionRacks: import('../av/AVRack').AVRack[] = [];
+    let allEq = rawEquipment;
+
+    if (rackReq.required) {
+      optionRacks = [defaultRack];
+      allEq = assignKnownRuToRack(rawEquipment, defaultRack, catalog);
+      why.push(`AV rack: ${rackReq.reason} (${rackPlace.note})`);
+    } else {
+      why.push(`AV rack: ${rackReq.reason}`);
+    }
+
     why.push(
       topo.connections.length
         ? `System: ${topo.connections.length} catalog-valid connection(s). Seat count did not select the topology.`
@@ -816,7 +828,7 @@ export function generateDesign(
       topo.notes,
       topo.connections,
       topo.routes,
-      racks
+      optionRacks
     );
   }
 

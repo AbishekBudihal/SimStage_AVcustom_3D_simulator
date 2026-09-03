@@ -6,6 +6,8 @@ import { renderEquipmentStep } from './EquipmentBrowser';
 import { renderValidationPanel } from './ValidationPanel';
 import { renderSimulationControlPanel } from './SimulationControlPanel';
 import { renderSystemLibraryPanel } from './SystemLibraryPanel';
+import { renderCableSchedulePanel } from './CableSchedulePanel';
+import { renderDocumentationPanel } from './DocumentationPanel';
 
 export function renderDesignPanel(container: HTMLElement, state: AppState): void {
   container.innerHTML = '';
@@ -18,8 +20,29 @@ export function renderDesignPanel(container: HTMLElement, state: AppState): void
     renderSimulationControlPanel(container, state);
     return;
   }
+  if (state.workspaceMode === 'docs') {
+    renderDocumentationPanel(container, state);
+    return;
+  }
   if (state.workspaceMode === 'system') {
-    renderSystemLibraryPanel(container, state);
+    const tabs = document.createElement('div');
+    tabs.className = 'design-tools';
+    (['library', 'cables'] as const).forEach((id) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'tool-tab' + (state.systemPanelTab === id ? ' active' : '');
+      b.textContent = id === 'library' ? 'Library' : 'Cables';
+      b.onclick = () => state.setSystemPanelTab(id);
+      tabs.appendChild(b);
+    });
+    container.appendChild(tabs);
+    const body = document.createElement('div');
+    container.appendChild(body);
+    if (state.systemPanelTab === 'cables') {
+      renderCableSchedulePanel(body, state);
+    } else {
+      renderSystemLibraryPanel(body, state);
+    }
     return;
   }
 

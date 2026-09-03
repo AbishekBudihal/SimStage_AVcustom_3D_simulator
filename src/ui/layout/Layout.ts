@@ -13,7 +13,11 @@ import { renderDesignAssistant } from '../panels/DesignAssistantPanel';
 import { renderProjectSetupOverlay } from '../panels/ProjectSetupOverlay';
 import { downloadProject, parseProjectJson, loadProjectInto } from '../../app/ProjectStore';
 import { validationReportFor } from '../../av/validation/validationCache';
+import { computeDesignHealth } from '../../av/DesignHealth';
+import { loadDefaultCatalog } from '../../catalog/loadCatalog';
 import type { ShellNav } from '../workspace/projectSetup';
+
+const healthCatalog = loadDefaultCatalog();
 
 export interface LayoutRefs {
   viewportEl: HTMLElement;
@@ -24,7 +28,8 @@ const SHELL_TABS: Array<[ShellNav, string]> = [
   ['design', 'Design'],
   ['system', 'System'],
   ['simulate', 'Simulate'],
-  ['validate', 'Validate']
+  ['validate', 'Validate'],
+  ['docs', 'Docs']
 ];
 
 export function buildLayout(root: HTMLElement, state: AppState): LayoutRefs {
@@ -328,14 +333,17 @@ export function buildLayout(root: HTMLElement, state: AppState): LayoutRefs {
       viewBar.appendChild(m);
     }
     const report = validationReportFor(state);
+    const health = computeDesignHealth(report, state.equipment, state.seats, healthCatalog);
     healthChip.className = 'health-chip ' + report.summary.designStatus;
     healthChip.textContent =
       report.summary.designStatus === 'pass'
-        ? `✓ ${report.summary.passCount}`
-        : `⚠ ${report.summary.warningCount}  ✕ ${report.summary.errorCount}`;
-    healthChip.title = report.summary.designStatus === 'pass'
-      ? 'Configured checks are passing'
-      : 'Open Validate for actionable design issues';
+        ? `${health.score} ✓ ${report.summary.passCount}`
+        : `${health.score} ⚠ ${report.summary.warningCount}  ✕ ${report.summary.errorCount}`;
+    healthChip.title = `Design Health: ${health.score}/100. ` + (
+      report.summary.designStatus === 'pass'
+        ? 'Configured checks are passing'
+        : 'Open Validate for actionable design issues'
+    );
     healthChip.onclick = () => state.setShellNav('validate');
 
     renderObjectBrowser(objectBrowserEl, state);
