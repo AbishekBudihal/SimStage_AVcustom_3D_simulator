@@ -60,7 +60,7 @@ export function evaluateRackRequirement(
     }
 
     // Room mounted peripherals do not trigger racks
-    if (ROOM_MOUNTED_CATEGORIES.has(product.category) && inst.mountingKind !== 'rack') {
+    if (ROOM_MOUNTED_CATEGORIES.has(product.category)) {
       continue;
     }
 
