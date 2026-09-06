@@ -76,6 +76,14 @@ export interface PortDefinition {
   maxConnections?: number;
   /** Catalog note, e.g. PoE. Never invent electrical ratings. */
   capabilities?: string[];
+  /** Maximum interface bandwidth in Gbps where verified (e.g. 18 for HDMI 2.0, 48 for HDMI 2.1) */
+  bandwidthGbps?: number;
+  /** Power over Ethernet supply budget in watts if this port acts as a PSE */
+  poeBudgetWatts?: number;
+  /** Power over Ethernet consumption requirement in watts if this port acts as a PD */
+  poeRequirementWatts?: number;
+  /** Optional engineering note regarding this port */
+  notes?: string;
 }
 
 export interface ResolvedPort extends PortDefinition {

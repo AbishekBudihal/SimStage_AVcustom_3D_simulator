@@ -18,11 +18,28 @@ import type { PortDefinition, SignalType } from '../system/SystemTypes';
 
 export type DataProvenance = 'verified' | 'estimated' | 'user_defined';
 
+export type SpecValueState = 'known' | 'unknown' | 'not_applicable' | 'estimated';
+
+export type ProvenanceTier =
+  | 'manufacturer_verified'
+  | 'company_defined'
+  | 'user_defined'
+  | 'engineering_estimate'
+  | 'unknown';
+
 export interface Provenanced<T> {
   value: T;
   provenance: DataProvenance;
   /** e.g. manufacturer datasheet URL, or "engineering estimate" */
   source?: string;
+}
+
+export interface ProvenancedField<T> {
+  value: T;
+  state: SpecValueState;
+  provenance: ProvenanceTier;
+  source?: string;
+  notes?: string;
 }
 
 export type EquipmentCategory =
@@ -102,6 +119,16 @@ export interface DisplaySpec {
   resolution: string;
   aspectRatio: string;
   brightnessNits: number;
+  /** Mounting orientation */
+  orientation?: 'landscape' | 'portrait';
+  /** VESA mount pattern (e.g. "400x400", "800x400") */
+  vesa?: string;
+  /** Bezel border width in meters where known */
+  bezelWidthM?: number;
+  /** Recommended minimum viewing distance in meters */
+  viewingDistanceMinM?: number;
+  /** Recommended maximum viewing distance in meters */
+  viewingDistanceMaxM?: number;
 }
 
 export interface SpeakerSpec {
@@ -110,10 +137,14 @@ export interface SpeakerSpec {
   dispersionDeg?: number;
   horizontalDispersionDeg?: number;
   verticalDispersionDeg?: number;
+  /** Symmetrical coverage angle in degrees */
+  coverageAngleDeg?: number;
   maxSplAt1m?: number;
   sensitivityDb?: number;
   frequencyResponse?: string;
   powerRating?: string;
+  /** Continuous or program power handling in watts */
+  powerHandlingWatts?: number;
   /** Catalog-declared. Do not infer from marketing copy. */
   powerClass?: 'active' | 'passive';
 }
@@ -124,6 +155,18 @@ export interface CameraSpec {
   horizontalFovDeg?: number;
   /** Vertical field of view in degrees. Optional; do not invent from 16:9. */
   verticalFovDeg?: number;
+  /** Diagonal field of view in degrees. Must NOT be silently assumed to be horizontal. */
+  diagonalFovDeg?: number;
+  /** PTZ (Pan-Tilt-Zoom) mechanical or electronic capability */
+  ptz?: boolean;
+  /** Horizontal pan range in degrees (e.g. ±170) */
+  panRangeDeg?: number;
+  /** Vertical tilt range in degrees (e.g. -30 to +90) */
+  tiltRangeDeg?: number;
+  /** Optical or digital zoom multiplier (e.g. 12 for 12x) */
+  zoomMultiplier?: number;
+  /** Auto-framing / speaker tracking capability */
+  tracking?: boolean;
 }
 
 export interface MicrophoneSpec {
@@ -139,6 +182,12 @@ export interface MicrophoneSpec {
   coverageModel?: 'omni' | 'directional_sector';
   /** Horizontal sector width in degrees. Required for directional_sector. */
   beamWidthDeg?: number;
+  /** Pickup angle in degrees where specified */
+  pickupAngleDeg?: number;
+  /** Directionality description (e.g. "cardioid", "hypercardioid", "toroid", "steerable array") */
+  directionality?: string;
+  /** Frequency response range (e.g. "100Hz - 20kHz") */
+  frequencyResponse?: string;
 }
 
 export interface MountingSpec {
@@ -157,6 +206,35 @@ export interface ConnectivitySpec {
   usb?: number;
   ethernet?: boolean;
 }
+
+export type FallbackGeometryKind =
+  | 'box'
+  | 'display'
+  | 'camera_ptz'
+  | 'camera_bar'
+  | 'speaker_ceiling'
+  | 'speaker_surface'
+  | 'mic_ceiling'
+  | 'mic_table'
+  | 'rack_unit'
+  | 'cylinder';
+
+export interface VisualizationSpec {
+  /** 3D model asset path (e.g. .glb/.gltf) if available */
+  modelAsset?: string;
+  /** Fallback geometric style when no exact 3D model exists */
+  fallbackGeometry: FallbackGeometryKind;
+  /** Front-facing surface normal relative to the device origin */
+  frontDirection?: 'front' | 'back' | 'top' | 'bottom';
+  /** Cable termination connection side */
+  connectionSide?: 'rear' | 'front' | 'bottom' | 'top' | 'side';
+  /** Minimum service / ventilation clearance around the unit in meters */
+  clearanceM?: number;
+  /** Default recommended installation height above finished floor (AFF) in meters */
+  defaultInstallationHeightM?: number;
+}
+
+export type LibraryTier = 'system' | 'company' | 'user';
 
 export interface EquipmentProduct {
   id: string;
@@ -189,7 +267,16 @@ export interface EquipmentProduct {
   modelAsset?: string; // path to .glb, if a real model exists
   /** Catalog rack units. Omit when unknown — do not invent. */
   rackUnits?: number;
+  /** Which tier of the product library this device belongs to (default 'system') */
+  libraryTier?: LibraryTier;
+  /** Optional SKU / order code */
+  sku?: string;
+  /** Purpose-built visualization metadata for 3D simulation */
+  visualization?: VisualizationSpec;
+  /** Optional engineering notes */
+  notes?: string;
 }
+
 
 export type PlacementMode = 'smart' | 'manual';
 /** How the product/instance entered the design. Manual edits of Auto Design items become 'manual'. */
