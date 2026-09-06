@@ -60,6 +60,16 @@ export function canConnectPorts(from: ResolvedPort, to: ResolvedPort): Compatibi
       reason: `Unsupported transport: ${from.transport} cannot connect to ${to.transport}.`
     };
   }
+  if (from.protocol && to.protocol) {
+    const protoCheck = checkProtocolCompatibility(from, to);
+    if (!protoCheck.ok) {
+      return {
+        ok: false,
+        code: 'CONN-011',
+        reason: protoCheck.reason ?? `Protocol mismatch: ${from.protocol} cannot connect to ${to.protocol}.`
+      };
+    }
+  }
   const transport: TransportId = from.transport ?? to.transport ?? inferTransport(from.connector);
   return {
     ok: true,
@@ -204,4 +214,144 @@ function mediumFor(transport: TransportId, connector: ResolvedPort['connector'])
   if (connector === 'usb-a') return 'USB';
   if (connector === 'speakon' || connector === 'phoenix') return 'Speaker';
   return 'Audio';
+}
+
+/**
+ * Validates protocol interoperability between two digital ports.
+ */
+export function checkProtocolCompatibility(
+  from: ResolvedPort,
+  to: ResolvedPort
+): { ok: boolean; reason?: string } {
+  if (!from.protocol || !to.protocol) return { ok: true };
+  const p1 = from.protocol.trim().toLowerCase();
+  const p2 = to.protocol.trim().toLowerCase();
+  if (p1 === p2) return { ok: true };
+
+  // Audio-over-IP network interop (Dante, AES67, Ravenna)
+  const isAoIP1 = p1 === 'dante' || p1 === 'aes67' || p1 === 'ravenna';
+  const isAoIP2 = p2 === 'dante' || p2 === 'aes67' || p2 === 'ravenna';
+  if (isAoIP1 && isAoIP2) {
+    return { ok: true };
+  }
+
+  // Serial & camera control cross-connection checks
+  const isSerial1 = p1 === 'rs-232' || p1 === 'rs-422' || p1 === 'rs-485' || p1 === 'visca';
+  const isSerial2 = p2 === 'rs-232' || p2 === 'rs-422' || p2 === 'rs-485' || p2 === 'visca';
+  if (isSerial1 !== isSerial2) {
+    return {
+      ok: false,
+      reason: `Protocol conflict: ${from.protocol} control interface cannot communicate with ${to.protocol} stream.`
+    };
+  }
+
+  return {
+    ok: false,
+    reason: `Incompatible protocols: ${from.protocol} cannot interoperate with ${to.protocol}.`
+  };
+}
+
+export interface BandwidthCheckResult {
+  ok: boolean;
+  bottleneck: boolean;
+  sourceGbps?: number;
+  destGbps?: number;
+  message?: string;
+}
+
+/**
+ * Checks for bandwidth bottlenecks where a source transmitter exceeds destination capacity.
+ */
+export function checkBandwidthCompatibility(
+  from: ResolvedPort,
+  to: ResolvedPort
+): BandwidthCheckResult {
+  const fromBw = from.bandwidthGbps;
+  const toBw = to.bandwidthGbps;
+
+  if (fromBw == null || toBw == null) {
+    return { ok: true, bottleneck: false, sourceGbps: fromBw, destGbps: toBw };
+  }
+
+  if (fromBw > toBw) {
+    return {
+      ok: true,
+      bottleneck: true,
+      sourceGbps: fromBw,
+      destGbps: toBw,
+      message: `Bandwidth bottleneck: Source outputs up to ${fromBw} Gbps, but destination supports only ${toBw} Gbps. Signal may downsample or fail at high resolutions.`
+    };
+  }
+
+  return { ok: true, bottleneck: false, sourceGbps: fromBw, destGbps: toBw };
+}
+
+export interface PoeCheckResult {
+  ok: boolean;
+  isPoeLink: boolean;
+  pdPort?: ResolvedPort;
+  psePort?: ResolvedPort;
+  requiredWatts?: number;
+  availableWatts?: number;
+  message?: string;
+}
+
+/**
+ * Checks PoE supply versus consumer demand on a link.
+ */
+export function checkPoeCompatibility(
+  from: ResolvedPort,
+  to: ResolvedPort
+): PoeCheckResult {
+  const isPd = (p: ResolvedPort) =>
+    (p.poeRequirementWatts != null && p.poeRequirementWatts > 0) ||
+    p.capabilities?.some((c) => c.toLowerCase().includes('poe pd'));
+  const isPse = (p: ResolvedPort) =>
+    (p.poeBudgetWatts != null && p.poeBudgetWatts > 0) ||
+    p.capabilities?.some((c) => c.toLowerCase().includes('pse') || c.toLowerCase().includes('poe+'));
+
+  const fromPd = isPd(from);
+  const toPd = isPd(to);
+  const fromPse = isPse(from);
+  const toPse = isPse(to);
+
+  if (!fromPd && !toPd) {
+    return { ok: true, isPoeLink: false };
+  }
+
+  const pdPort = toPd ? to : from;
+  const psePort = fromPse ? from : (toPse ? to : undefined);
+  const requiredWatts = pdPort.poeRequirementWatts ?? 15.4;
+
+  if (!psePort) {
+    return {
+      ok: false,
+      isPoeLink: true,
+      pdPort,
+      requiredWatts,
+      message: `Port "${pdPort.label}" requires PoE (${requiredWatts}W), but connected endpoint does not supply PoE power.`
+    };
+  }
+
+  const availableWatts = psePort.poeBudgetWatts;
+  if (availableWatts != null && availableWatts < requiredWatts) {
+    return {
+      ok: false,
+      isPoeLink: true,
+      pdPort,
+      psePort,
+      requiredWatts,
+      availableWatts,
+      message: `PoE port capacity insufficient: connected device requires ${requiredWatts}W but port supplies max ${availableWatts}W.`
+    };
+  }
+
+  return {
+    ok: true,
+    isPoeLink: true,
+    pdPort,
+    psePort,
+    requiredWatts,
+    availableWatts
+  };
 }

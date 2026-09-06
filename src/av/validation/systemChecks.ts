@@ -9,7 +9,15 @@ import type { ProjectValidationContext } from './ValidationContext';
 import type { ValidationCheck, ValidationFinding } from './ValidationTypes';
 import { SYSTEM_ROLE_CATEGORIES } from '../../system/SystemTypes';
 import { resolveInstancePorts, resolveProductPorts } from '../../system/PortResolver';
-import { canConnectPorts, canConnectWithCable, maxConnectionsFor, occupancyConflict } from '../../system/PortCompatibility';
+import {
+  canConnectPorts,
+  canConnectWithCable,
+  maxConnectionsFor,
+  occupancyConflict,
+  checkBandwidthCompatibility,
+  checkPoeCompatibility,
+  checkProtocolCompatibility
+} from '../../system/PortCompatibility';
 import { portConnectionRole } from '../../system/ConnectionStatus';
 import { enumerateSignalPaths } from '../../system/SignalPathEngine';
 import { cachedCableRoute, type CableRouteContext } from '../../system/CableRouter';
@@ -544,6 +552,172 @@ export const checkDisconnectedEquipment: ValidationCheck = {
   }
 };
 
+export const checkPortBandwidth: ValidationCheck = {
+  code: 'CONN-009',
+  category: 'system',
+  title: 'Interface bandwidth bottleneck',
+  evaluate(ctx): ValidationFinding[] {
+    const out: ValidationFinding[] = [];
+    for (const c of ctx.connections) {
+      const fromEq = ctx.equipment.find((e) => e.instanceId === c.fromInstanceId);
+      const toEq = ctx.equipment.find((e) => e.instanceId === c.toInstanceId);
+      if (!fromEq || !toEq) continue;
+      const from = resolveInstancePorts(fromEq.instanceId, fromEq.productId, ctx.catalog).find((p) => p.id === c.fromPortId);
+      const to = resolveInstancePorts(toEq.instanceId, toEq.productId, ctx.catalog).find((p) => p.id === c.toPortId);
+      if (!from || !to) continue;
+
+      const bw = checkBandwidthCompatibility(from, to);
+      if (bw.bottleneck) {
+        out.push(
+          finding({
+            id: `CONN-009-${c.id}`,
+            code: 'CONN-009',
+            severity: 'warning',
+            category: 'system',
+            title: 'Interface bandwidth bottleneck',
+            message: `${fromEq.name} (${from.label}, ${bw.sourceGbps} Gbps) → ${toEq.name} (${to.label}, ${bw.destGbps} Gbps): ${bw.message}`,
+            explanation: 'Connecting a high-bandwidth transmitter to a lower-spec receiver port will limit maximum video resolution and frame rate.',
+            objectId: fromEq.instanceId,
+            affectedObjects: [
+              { kind: 'equipment', id: fromEq.instanceId, label: fromEq.name },
+              { kind: 'equipment', id: toEq.instanceId, label: toEq.name }
+            ],
+            recommendedActions: ['Upgrade destination input port or adjust source output format'],
+            source: 'PortCompatibility.bandwidth'
+          })
+        );
+      }
+    }
+    return out;
+  }
+};
+
+export const checkPortPoe: ValidationCheck = {
+  code: 'CONN-010',
+  category: 'system',
+  title: 'PoE power delivery & budget',
+  evaluate(ctx): ValidationFinding[] {
+    const out: ValidationFinding[] = [];
+
+    // 1. Link-level PoE checks (device requires PoE but fed by non-PoE port)
+    for (const c of ctx.connections) {
+      const fromEq = ctx.equipment.find((e) => e.instanceId === c.fromInstanceId);
+      const toEq = ctx.equipment.find((e) => e.instanceId === c.toInstanceId);
+      if (!fromEq || !toEq) continue;
+      const from = resolveInstancePorts(fromEq.instanceId, fromEq.productId, ctx.catalog).find((p) => p.id === c.fromPortId);
+      const to = resolveInstancePorts(toEq.instanceId, toEq.productId, ctx.catalog).find((p) => p.id === c.toPortId);
+      if (!from || !to) continue;
+
+      const poe = checkPoeCompatibility(from, to);
+      if (poe.isPoeLink && !poe.ok) {
+        const pdEq = poe.pdPort === from ? fromEq : toEq;
+        out.push(
+          finding({
+            id: `CONN-010-${c.id}`,
+            code: 'CONN-010',
+            severity: 'error',
+            category: 'system',
+            title: 'PoE power unavailable',
+            message: `${pdEq.name}: ${poe.message}`,
+            explanation: 'Equipment requiring Power over Ethernet must connect to a PSE network switch or PoE injector port.',
+            objectId: pdEq.instanceId,
+            affectedObjects: [
+              { kind: 'equipment', id: fromEq.instanceId, label: fromEq.name },
+              { kind: 'equipment', id: toEq.instanceId, label: toEq.name }
+            ],
+            recommendedActions: ['Connect to a PoE-enabled switch port or add a PoE injector'],
+            source: 'PortCompatibility.poe'
+          })
+        );
+      }
+    }
+
+    // 2. Switch-level aggregated PoE budget check
+    for (const inst of ctx.equipment) {
+      const ports = resolveInstancePorts(inst.instanceId, inst.productId, ctx.catalog);
+      const psePorts = ports.filter((p) => (p.poeBudgetWatts != null && p.poeBudgetWatts > 0));
+      if (!psePorts.length) continue;
+
+      for (const psePort of psePorts) {
+        const conns = ctx.connections.filter(
+          (c) => (c.fromInstanceId === inst.instanceId && c.fromPortId === psePort.id) ||
+                 (c.toInstanceId === inst.instanceId && c.toPortId === psePort.id)
+        );
+        let totalDraw = 0;
+        for (const conn of conns) {
+          const otherId = conn.fromInstanceId === inst.instanceId ? conn.toInstanceId : conn.fromInstanceId;
+          const otherPortId = conn.fromInstanceId === inst.instanceId ? conn.toPortId : conn.fromPortId;
+          const otherEq = ctx.equipment.find((e) => e.instanceId === otherId);
+          if (!otherEq) continue;
+          const otherPort = resolveInstancePorts(otherEq.instanceId, otherEq.productId, ctx.catalog).find((p) => p.id === otherPortId);
+          if (otherPort?.poeRequirementWatts) {
+            totalDraw += otherPort.poeRequirementWatts;
+          }
+        }
+        if (psePort.poeBudgetWatts && totalDraw > psePort.poeBudgetWatts) {
+          out.push(
+            finding({
+              id: `CONN-010-budget-${inst.instanceId}-${psePort.id}`,
+              code: 'CONN-010',
+              severity: 'error',
+              category: 'system',
+              title: 'PoE power budget exceeded',
+              message: `${inst.name} (${psePort.label}): Total PoE load (${totalDraw}W) exceeds port budget (${psePort.poeBudgetWatts}W).`,
+              explanation: 'Aggregated PoE demand across connected equipment cannot exceed the switch or port power supply budget.',
+              objectId: inst.instanceId,
+              affectedObjects: [{ kind: 'equipment', id: inst.instanceId, label: inst.name }],
+              recommendedActions: ['Redistribute PoE loads or increase PSE power budget'],
+              source: 'PortDefinition.poeBudgetWatts'
+            })
+          );
+        }
+      }
+    }
+
+    return out;
+  }
+};
+
+export const checkProtocolMismatch: ValidationCheck = {
+  code: 'CONN-011',
+  category: 'system',
+  title: 'Digital protocol mismatch',
+  evaluate(ctx): ValidationFinding[] {
+    const out: ValidationFinding[] = [];
+    for (const c of ctx.connections) {
+      const fromEq = ctx.equipment.find((e) => e.instanceId === c.fromInstanceId);
+      const toEq = ctx.equipment.find((e) => e.instanceId === c.toInstanceId);
+      if (!fromEq || !toEq) continue;
+      const from = resolveInstancePorts(fromEq.instanceId, fromEq.productId, ctx.catalog).find((p) => p.id === c.fromPortId);
+      const to = resolveInstancePorts(toEq.instanceId, toEq.productId, ctx.catalog).find((p) => p.id === c.toPortId);
+      if (!from || !to) continue;
+
+      const proto = checkProtocolCompatibility(from, to);
+      if (!proto.ok) {
+        out.push(
+          finding({
+            id: `CONN-011-${c.id}`,
+            code: 'CONN-011',
+            severity: 'error',
+            category: 'system',
+            title: 'Protocol mismatch',
+            message: `${fromEq.name} (${from.label}, ${from.protocol}) → ${toEq.name} (${to.label}, ${to.protocol}): ${proto.reason}`,
+            explanation: 'Digital network audio, video, and control streams require compatible protocols between endpoints.',
+            objectId: fromEq.instanceId,
+            affectedObjects: [
+              { kind: 'equipment', id: fromEq.instanceId, label: fromEq.name },
+              { kind: 'equipment', id: toEq.instanceId, label: toEq.name }
+            ],
+            recommendedActions: ['Connect ports that use matching protocols or add an intermediate converter/bridge'],
+            source: 'PortCompatibility.protocol'
+          })
+        );
+      }
+    }
+    return out;
+  }
+};
+
 export const SYSTEM_CHECKS: ValidationCheck[] = [
   checkPortsIncomplete,
   checkSignalDirection,
@@ -557,5 +731,8 @@ export const SYSTEM_CHECKS: ValidationCheck[] = [
   checkConnMissingEndpoint,
   checkConnCableType,
   checkConnRouteUnavailable,
-  checkDisconnectedEquipment
+  checkDisconnectedEquipment,
+  checkPortBandwidth,
+  checkPortPoe,
+  checkProtocolMismatch
 ];

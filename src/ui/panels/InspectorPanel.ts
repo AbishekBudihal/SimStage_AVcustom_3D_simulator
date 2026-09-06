@@ -810,11 +810,18 @@ function renderEquipmentInspector(body: HTMLElement, state: AppState, instanceId
             ? ' ✓ compatible'
             : ' ✕ incompatible'
           : '';
+      const extraMeta: string[] = [];
+      if (p.bandwidthGbps) extraMeta.push(`${p.bandwidthGbps} Gbps`);
+      if (p.poeRequirementWatts) extraMeta.push(`PoE Req: ${p.poeRequirementWatts}W`);
+      else if (p.poeBudgetWatts) extraMeta.push(`PoE Budget: ${p.poeBudgetWatts}W`);
+      if (p.protocol) extraMeta.push(p.protocol);
+      const extraMetaStr = extraMeta.length > 0 ? ` · ${extraMeta.join(' · ')}` : '';
+
       metricRow(
         sys,
         p.label,
         state.systemDetailMode === 'pro'
-          ? `${mark} ${partner} · ${p.direction} · ${p.signalTypes.join('/')} · ${p.connector} · ${role}${hint}`
+          ? `${mark} ${partner} · ${p.direction} · ${p.signalTypes.join('/')} · ${p.connector} · ${role}${extraMetaStr}${hint}`
           : `${mark} ${partner}${hint}`
       );
       const actions = document.createElement('div');
@@ -992,6 +999,15 @@ function renderConnectionInspector(body: HTMLElement, state: AppState, id: strin
   metricRow(body, 'Transport', c.transport);
   metricRow(body, 'Route length', `${route.totalLength.toFixed(2)} m (${route.segments.length} segments)`);
   metricRow(body, 'Path type', route.pathType);
+  if (srcPort?.bandwidthGbps || dstPort?.bandwidthGbps) {
+    metricRow(body, 'Bandwidth', `${srcPort?.bandwidthGbps ?? '—'} Gbps (out) → ${dstPort?.bandwidthGbps ?? '—'} Gbps (in)`);
+  }
+  if (srcPort?.poeBudgetWatts || dstPort?.poeRequirementWatts) {
+    metricRow(body, 'PoE Power', `${srcPort?.poeBudgetWatts ? `${srcPort.poeBudgetWatts}W PSE` : 'Non-PoE'} → ${dstPort?.poeRequirementWatts ? `${dstPort.poeRequirementWatts}W PD` : 'No PD'}`);
+  }
+  if (srcPort?.protocol || dstPort?.protocol) {
+    metricRow(body, 'Protocol', `${srcPort?.protocol ?? 'Native'} → ${dstPort?.protocol ?? 'Native'}`);
+  }
   const limit = state.cableLengthLimitsM[cableTypeOf(c)];
   metricRow(body, 'Length check', limit == null ? 'No configured limit' : route.totalLength > limit ? `Exceeds ${limit} m` : `Within ${limit} m`);
   metricRow(
