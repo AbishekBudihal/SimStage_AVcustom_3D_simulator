@@ -5,6 +5,7 @@
  */
 
 import type { EquipmentInstance, EquipmentCatalog } from '../catalog/EquipmentCatalog';
+import { hasCapability } from '../catalog/DeviceCapabilities';
 
 export interface RackEquipmentItem {
   instanceId: string;
@@ -64,17 +65,7 @@ export function evaluateRackRequirement(
       continue;
     }
 
-    // Centralized infrastructure categories (DSP, amplifier, matrix switch, network, codec)
-    const isCentralizedCat =
-      product.category === 'dsp' ||
-      product.category === 'amplifier' ||
-      product.category === 'switcher' ||
-      product.category === 'network';
-
-    const is19Inch = product.physical?.width >= 0.43 && product.physical?.width <= 0.50;
-    const hasRackSpec = (product.rackUnits != null && product.rackUnits > 0) || product.mounting?.rack === true || is19Inch;
-
-    if (isCentralizedCat && hasRackSpec) {
+    if (hasCapability(catalog, product.id, 'rackMountable')) {
       const derivedRU = product.physical?.height > 0 ? Math.max(1, Math.round(product.physical.height / 0.04445)) : 1;
       const ru = inst.rackUnits ?? product.rackUnits ?? derivedRU;
       rackDevices.push({

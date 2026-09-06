@@ -8,6 +8,7 @@
  */
 
 import type { EquipmentInstance, EquipmentCatalog, EquipmentProduct } from '../catalog/EquipmentCatalog';
+import { hasCapability } from '../catalog/DeviceCapabilities';
 import type { Seat, TableSpec } from '../room/SeatingGenerator';
 import type { RoomModel } from '../room/RoomModel';
 import { presentationRotation } from '../room/RoomGeometry';
@@ -30,7 +31,10 @@ export type ActiveDisplayResult =
   | { kind: 'ok'; placement: DisplayPlacement; product: EquipmentProduct; instance: EquipmentInstance };
 
 export function resolveActiveDisplay(equipment: EquipmentInstance[], catalog: EquipmentCatalog): ActiveDisplayResult {
-  const inst = equipment.find((e) => catalog.get(e.productId)?.category === 'display');
+  const inst = equipment.find((e) => {
+    const p = catalog.get(e.productId);
+    return p ? (p.category === 'display' || hasCapability(catalog, e.productId, 'displayCoverage')) : false;
+  });
   if (!inst) return { kind: 'none' };
   const product = catalog.get(inst.productId);
   if (!product) return { kind: 'none' };
