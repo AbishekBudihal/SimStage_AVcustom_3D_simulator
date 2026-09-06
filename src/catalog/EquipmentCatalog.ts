@@ -306,8 +306,14 @@ export interface EquipmentInstance {
 export class EquipmentCatalog {
   private products = new Map<string, EquipmentProduct>();
 
-  register(products: EquipmentProduct[]): void {
-    products.forEach((p) => this.products.set(p.id, p));
+  register(products: EquipmentProduct[], defaultTier: LibraryTier = 'system'): void {
+    products.forEach((p) => {
+      const productWithTier: EquipmentProduct = {
+        ...p,
+        libraryTier: p.libraryTier ?? defaultTier
+      };
+      this.products.set(p.id, productWithTier);
+    });
   }
 
   get(id: string): EquipmentProduct | undefined {
@@ -322,12 +328,27 @@ export class EquipmentCatalog {
     return this.all().filter((p) => p.category === category);
   }
 
+  byTier(tier: LibraryTier): EquipmentProduct[] {
+    return this.all().filter((p) => (p.libraryTier ?? 'system') === tier);
+  }
+
+  tierCounts(): Record<LibraryTier, number> {
+    const counts: Record<LibraryTier, number> = { system: 0, company: 0, user: 0 };
+    for (const p of this.products.values()) {
+      const t = p.libraryTier ?? 'system';
+      counts[t] = (counts[t] || 0) + 1;
+    }
+    return counts;
+  }
+
   search(query: {
     category?: EquipmentCategory;
     manufacturer?: string;
     text?: string;
+    tier?: LibraryTier;
   }): EquipmentProduct[] {
     return this.all().filter((p) => {
+      if (query.tier && (p.libraryTier ?? 'system') !== query.tier) return false;
       if (query.category && p.category !== query.category) return false;
       if (query.manufacturer && p.manufacturer !== query.manufacturer) return false;
       if (query.text) {

@@ -16,7 +16,7 @@
 import type { AppState } from '../../app/AppState';
 import { createDefaultRoom } from '../../room/RoomModel';
 import { loadDefaultCatalog } from '../../catalog/loadCatalog';
-import { CATEGORY_GROUPS, type EquipmentProduct } from '../../catalog/EquipmentCatalog';
+import { CATEGORY_GROUPS, type EquipmentProduct, type LibraryTier } from '../../catalog/EquipmentCatalog';
 import type { EquipmentInstance } from '../../catalog/EquipmentCatalog';
 import type { RoomModel } from '../../room/RoomModel';
 import {
@@ -36,6 +36,7 @@ import {
   speakerEngineeringReady
 } from '../../autodesign/CatalogCandidates';
 import { loadUserLibrary } from '../../catalog/UserLibrary';
+import { loadLibrary } from '../../catalog/ProductLibrary';
 import { renderCustomDevicePanel } from './CustomDevicePanel';
 
 const catalog = loadDefaultCatalog();
@@ -50,11 +51,13 @@ type Filters = {
 const browserState: {
   groupId: string;
   search: string;
+  tierFilter: 'all' | LibraryTier;
   filters: Filters;
   openProductId: string | null;
 } = {
   groupId: 'displays',
   search: '',
+  tierFilter: 'all',
   filters: { manufacturer: '', size: '', resolution: '', technology: '' },
   openProductId: null
 };
@@ -93,6 +96,39 @@ function renderCatalogBrowser(wrap: HTMLElement, state: AppState): void {
   };
   wrap.appendChild(searchInput);
 
+  // Tier Filter Chips (§14)
+  const tierFilterRow = document.createElement('div');
+  tierFilterRow.style.display = 'flex';
+  tierFilterRow.style.gap = '4px';
+  tierFilterRow.style.marginTop = '6px';
+  tierFilterRow.style.marginBottom = '6px';
+  tierFilterRow.style.flexWrap = 'wrap';
+
+  const tierCounts = catalog.tierCounts();
+  const totalCount = catalog.all().length;
+
+  const tierButtons: Array<{ id: 'all' | LibraryTier; label: string; count: number }> = [
+    { id: 'all', label: 'All', count: totalCount },
+    { id: 'system', label: 'System', count: tierCounts.system },
+    { id: 'company', label: 'Company', count: tierCounts.company },
+    { id: 'user', label: 'User', count: tierCounts.user }
+  ];
+
+  tierButtons.forEach((tb) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-sm' + (browserState.tierFilter === tb.id ? ' primary' : '');
+    btn.style.fontSize = '10px';
+    btn.style.padding = '2px 6px';
+    btn.textContent = `${tb.label} (${tb.count})`;
+    btn.onclick = () => {
+      browserState.tierFilter = tb.id;
+      renderEquipmentStep(wrap.parentElement!, state);
+    };
+    tierFilterRow.appendChild(btn);
+  });
+  wrap.appendChild(tierFilterRow);
+
   const catTitle = document.createElement('div');
   catTitle.className = 'nav-section-title';
   catTitle.textContent = 'CATEGORY';
@@ -113,12 +149,42 @@ function renderCatalogBrowser(wrap: HTMLElement, state: AppState): void {
     catList.appendChild(item);
   });
 
-  // User Library section
-  const userLib = loadUserLibrary();
+  // Company Library section (§14)
+  const companyLib = loadLibrary('company');
+  if (companyLib.length > 0) {
+    const companyTitle = document.createElement('div');
+    companyTitle.className = 'nav-section-title';
+    companyTitle.textContent = `COMPANY LIBRARY (${companyLib.length})`;
+    companyTitle.style.marginTop = '8px';
+    wrap.appendChild(companyTitle);
+    companyLib.forEach((p) => {
+      const item = document.createElement('div');
+      item.className = 'nav-item';
+      item.textContent = `🏢 ${p.manufacturer} ${p.model}`;
+      item.title = p.description ?? p.category;
+      item.onclick = () => {
+        if (!catalog.get(p.id)) catalog.register([p], 'company');
+        const id = `eq-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        state.addEquipment({
+          instanceId: id,
+          productId: p.id,
+          name: `${p.manufacturer} ${p.model}`,
+          position: { x: 0, y: 1, z: 0 },
+          rotationY: 0,
+          placementMode: 'manual'
+        });
+        state.select('equipment', id);
+      };
+      wrap.appendChild(item);
+    });
+  }
+
+  // User Library section (§14)
+  const userLib = loadLibrary('user');
   if (userLib.length > 0) {
     const userTitle = document.createElement('div');
     userTitle.className = 'nav-section-title';
-    userTitle.textContent = 'USER LIBRARY';
+    userTitle.textContent = `USER LIBRARY (${userLib.length})`;
     userTitle.style.marginTop = '8px';
     wrap.appendChild(userTitle);
     userLib.forEach((p) => {
@@ -127,8 +193,7 @@ function renderCatalogBrowser(wrap: HTMLElement, state: AppState): void {
       item.textContent = `★ ${p.manufacturer} ${p.model}`;
       item.title = p.description ?? p.category;
       item.onclick = () => {
-        // Register in catalog if not already present
-        if (!catalog.get(p.id)) catalog.register([p]);
+        if (!catalog.get(p.id)) catalog.register([p], 'user');
         const id = `eq-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
         state.addEquipment({
           instanceId: id,
@@ -182,6 +247,9 @@ function renderCatalogBrowser(wrap: HTMLElement, state: AppState): void {
       text: browserState.search,
       manufacturer: browserState.filters.manufacturer || undefined
     });
+    if (browserState.tierFilter !== 'all') {
+      products = products.filter((p) => (p.libraryTier ?? 'system') === browserState.tierFilter);
+    }
     if (browserState.filters.size) {
       products = products.filter((p) => String(p.display?.diagonalInches) === browserState.filters.size);
     }
@@ -271,10 +339,44 @@ function renderProductCard(p: EquipmentProduct, state: AppState, wrap: HTMLEleme
   const card = document.createElement('div');
   card.className = 'equip-card';
 
+  const badgesRow = document.createElement('div');
+  badgesRow.style.display = 'flex';
+  badgesRow.style.gap = '4px';
+  badgesRow.style.alignItems = 'center';
+  badgesRow.style.marginBottom = '4px';
+
+  const tier = p.libraryTier ?? 'system';
+  const tierBadge = document.createElement('span');
+  tierBadge.className = `tier-badge tier-${tier}`;
+  tierBadge.style.fontSize = '9px';
+  tierBadge.style.fontWeight = '600';
+  tierBadge.style.textTransform = 'uppercase';
+  tierBadge.style.padding = '1px 5px';
+  tierBadge.style.borderRadius = '3px';
+
+  if (tier === 'system') {
+    tierBadge.textContent = 'System';
+    tierBadge.style.background = '#2563eb22';
+    tierBadge.style.color = '#60a5fa';
+    tierBadge.style.border = '1px solid #3b82f644';
+  } else if (tier === 'company') {
+    tierBadge.textContent = 'Company';
+    tierBadge.style.background = '#8b5cf622';
+    tierBadge.style.color = '#a78bfa';
+    tierBadge.style.border = '1px solid #8b5cf644';
+  } else {
+    tierBadge.textContent = 'User';
+    tierBadge.style.background = '#f59e0b22';
+    tierBadge.style.color = '#fbbf24';
+    tierBadge.style.border = '1px solid #f59e0b44';
+  }
+
   const prov = document.createElement('span');
   prov.className = `provenance ${p.provenance}`;
   prov.textContent = p.provenance.replace('_', ' ');
-  card.appendChild(prov);
+
+  badgesRow.append(tierBadge, prov);
+  card.appendChild(badgesRow);
 
   const preview = document.createElement('div');
   preview.className = 'equip-card-preview';

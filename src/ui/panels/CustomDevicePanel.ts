@@ -1,4 +1,4 @@
-﻿/**
+/**
  * CustomDevicePanel.ts
  * Purpose-driven Custom Device Builder UI (§4, §15).
  * Implements progressive disclosure with device type selectors and
@@ -15,6 +15,7 @@ import {
   type CustomDeviceInput,
   type CustomDeviceType
 } from '../../catalog/CustomDeviceBuilder';
+import { saveProductToLibrary } from '../../catalog/ProductLibrary';
 import { saveUserDevice } from '../../catalog/UserLibrary';
 import { loadDefaultCatalog } from '../../catalog/loadCatalog';
 
@@ -316,8 +317,9 @@ export function renderCustomDevicePanel(
     }
     try {
       const product = buildCustomDevice(draft as CustomDeviceInput);
-      saveUserDevice(product);
-      catalog.register([product]);
+      const targetTier = draft.libraryTier ?? 'user';
+      saveProductToLibrary(product, targetTier);
+      catalog.register([product], targetTier);
       const id = `eq-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       state.addEquipment({
         instanceId: id,
@@ -347,9 +349,11 @@ export function renderCustomDevicePanel(
     }
     try {
       const product = buildCustomDevice(draft as CustomDeviceInput);
-      saveUserDevice(product);
-      catalog.register([product]);
-      errorEl.textContent = `Saved: ${product.manufacturer} ${product.model}`;
+      const targetTier = draft.libraryTier ?? 'user';
+      saveProductToLibrary(product, targetTier);
+      catalog.register([product], targetTier);
+      const tierLabel = targetTier === 'company' ? 'Company Library' : 'User Library';
+      errorEl.textContent = `Saved to ${tierLabel}: ${product.manufacturer} ${product.model}`;
       errorEl.style.color = 'var(--success)';
     } catch (e) {
       errorEl.textContent = (e as Error).message;
