@@ -48,7 +48,7 @@ import {
   type UiComplexity
 } from '../ui/workspace/projectSetup';
 
-const catalog = loadDefaultCatalog();
+export const catalog = loadDefaultCatalog();
 
 /** Find the lowest RU position where a device of `units` RU can fit without overlapping. */
 function nextFreeRU(
@@ -364,6 +364,10 @@ export class AppState {
       systemLayout: this.systemLayout,
       selection: this.selection
     });
+  }
+
+  getCatalog(): import('../catalog/EquipmentCatalog').EquipmentCatalog {
+    return catalog;
   }
 
   private applySnapshot(snap: AppStateSnapshot): void {

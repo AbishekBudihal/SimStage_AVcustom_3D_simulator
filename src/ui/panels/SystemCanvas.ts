@@ -11,6 +11,7 @@ import { enumerateSignalPaths, pathLabel } from '../../system/SignalPathEngine';
 import { NODE_W, nodeHeight, orthoPath, disciplineForCategory } from '../../system/SystemLayout';
 import type { ResolvedPort } from '../../system/SystemTypes';
 import { validationReportFor } from '../../av/validation/validationCache';
+import { openSchematicImportModal } from './SchematicImportModal';
 
 const catalog = loadDefaultCatalog();
 
@@ -22,7 +23,13 @@ export function renderSystemCanvas(container: HTMLElement, state: AppState): voi
     const empty = document.createElement('div');
     empty.className = 'empty-state';
     empty.innerHTML = `<div class="empty-title">No devices in the project</div>
-      <div class="empty-body">Add catalog equipment from Design or the System library. Topology is not tied to seat count.</div>`;
+      <div class="empty-body">Add catalog equipment from Design or the System library, or import an AV schematic.</div>`;
+    const impBtn = mkBtn('Import Schematic', () => {
+      const host = (container.closest('#app-root') as HTMLElement) || document.body;
+      openSchematicImportModal(host, state);
+    }, true);
+    impBtn.style.marginTop = '12px';
+    empty.appendChild(impBtn);
     container.appendChild(empty);
     return;
   }
@@ -32,7 +39,7 @@ export function renderSystemCanvas(container: HTMLElement, state: AppState): voi
     return;
   }
 
-  container.appendChild(renderToolbar(state));
+  container.appendChild(renderToolbar(state, container));
   if (!state.connections.length) {
     const emptyCx = document.createElement('div');
     emptyCx.className = 'empty-state';
@@ -205,7 +212,7 @@ export function renderSystemCanvas(container: HTMLElement, state: AppState): voi
   container.appendChild(renderFooter(state));
 }
 
-function renderToolbar(state: AppState): HTMLElement {
+function renderToolbar(state: AppState, container: HTMLElement): HTMLElement {
   const toolbar = document.createElement('div');
   toolbar.className = 'system-canvas-toolbar';
   const report = validationReportFor(state);
@@ -221,6 +228,10 @@ function renderToolbar(state: AppState): HTMLElement {
   toolbar.append(
     status,
     search,
+    mkBtn('Import Schematic', () => {
+      const host = (container.closest('#app-root') as HTMLElement) || document.body;
+      openSchematicImportModal(host, state);
+    }),
     mkBtn('Auto Layout', () => state.autoLayoutSystem()),
     mkBtn('Group', () => state.groupSelected()),
     mkBtn('Validate', () => state.setWorkspaceMode('validate')),

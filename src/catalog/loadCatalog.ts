@@ -5,12 +5,21 @@ import microphonesJson from '../../data/microphones.json';
 import camerasJson from '../../data/cameras.json';
 import systemDevicesJson from '../../data/system-devices.json';
 
+let defaultCatalog: EquipmentCatalog | null = null;
+
 export function loadDefaultCatalog(): EquipmentCatalog {
-  const catalog = new EquipmentCatalog();
-  catalog.register(displaysJson as EquipmentProduct[]);
-  catalog.register(speakersJson as EquipmentProduct[]);
-  catalog.register(microphonesJson as EquipmentProduct[]);
-  catalog.register(camerasJson as EquipmentProduct[]);
-  catalog.register(systemDevicesJson as EquipmentProduct[]);
-  return catalog;
+  if (!defaultCatalog) {
+    defaultCatalog = new EquipmentCatalog();
+    defaultCatalog.register(displaysJson as EquipmentProduct[]);
+    defaultCatalog.register(speakersJson as EquipmentProduct[]);
+    defaultCatalog.register(microphonesJson as EquipmentProduct[]);
+    defaultCatalog.register(camerasJson as EquipmentProduct[]);
+    defaultCatalog.register(systemDevicesJson as EquipmentProduct[]);
+  }
+  return defaultCatalog;
 }
+
+export function resetDefaultCatalog(): void {
+  defaultCatalog = null;
+}
+
