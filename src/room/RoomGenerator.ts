@@ -126,6 +126,91 @@ function buildWall(
   return group;
 }
 
+/**
+ * Adds architectural wall embellishments (acoustic panels, wood slats, glass storefront mullions)
+ * positioned cleanly along the wall without clipping through door/window openings.
+ */
+function buildWallTreatments(
+  wallLen: number,
+  wallH: number,
+  wallStyle: WallStyle,
+  openings: Opening[],
+  isPresentationWall: boolean
+): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'wall-treatments';
+
+  // Function to check if a treatment element collides with an opening
+  const collidesWithOpening = (startX: number, endX: number, minY: number, maxY: number): boolean => {
+    return openings.some((o) => {
+      const oLeft = o.offset - 0.1;
+      const oRight = o.offset + o.width + 0.1;
+      const oBottom = o.sillHeight - 0.05;
+      const oTop = o.sillHeight + o.height + 0.05;
+      return !(endX < oLeft || startX > oRight || maxY < oBottom || minY > oTop);
+    });
+  };
+
+  if (wallStyle === 'acoustic_fabric_panels') {
+    // Modular beveled acoustic wall panels: 0.6m wide x 1.2m high, 0.03m thick
+    const pw = 0.6;
+    const ph = 1.2;
+    const pt = 0.03;
+    const py = 1.6; // Center at ear/speaking height (1.6m AFF)
+    const spacing = 0.85;
+    const count = Math.floor((wallLen - 0.8) / spacing);
+
+    const panelGeo = new THREE.BoxGeometry(pw, ph, pt);
+    const panelMat = isPresentationWall ? BASE_MATERIALS.wallAccentAcoustic : BASE_MATERIALS.wallAccentAcoustic;
+
+    for (let i = 0; i < count; i++) {
+      const px = 0.6 + i * spacing + pw / 2;
+      if (!collidesWithOpening(px - pw / 2, px + pw / 2, py - ph / 2, py + ph / 2)) {
+        const panel = new THREE.Mesh(panelGeo, panelMat);
+        panel.position.set(px, py, -pt / 2 - 0.005);
+        panel.castShadow = true;
+        group.add(panel);
+      }
+    }
+  } else if (wallStyle === 'wood_paneling') {
+    // Vertical wood slats: 0.08m wide x full wall height, 0.025m proud of wall
+    const slatW = 0.08;
+    const slatH = wallH * 0.9;
+    const slatT = 0.025;
+    const slatSpacing = 0.14;
+    const slatGeo = new THREE.BoxGeometry(slatW, slatH, slatT);
+    const slatMat = BASE_MATERIALS.wallAccentWood;
+
+    const count = Math.floor((wallLen - 0.4) / slatSpacing);
+    for (let i = 0; i < count; i++) {
+      const sx = 0.3 + i * slatSpacing + slatW / 2;
+      if (!collidesWithOpening(sx - slatW / 2, sx + slatW / 2, 0.1, slatH)) {
+        const slat = new THREE.Mesh(slatGeo, slatMat);
+        slat.position.set(sx, slatH / 2, -slatT / 2 - 0.004);
+        group.add(slat);
+      }
+    }
+  } else if (wallStyle === 'glass_storefront') {
+    // Aluminum mullion frames spaced every 1.5m
+    const mullionW = 0.05;
+    const mullionT = 0.04;
+    const mullionGeo = new THREE.BoxGeometry(mullionW, wallH, mullionT);
+    const mullionMat = new THREE.MeshStandardMaterial({ color: 0x222428, roughness: 0.4, metalness: 0.6 });
+
+    const count = Math.floor(wallLen / 1.5);
+    for (let i = 1; i <= count; i++) {
+      const mx = i * 1.5;
+      if (!collidesWithOpening(mx - mullionW / 2, mx + mullionW / 2, 0, wallH)) {
+        const mullion = new THREE.Mesh(mullionGeo, mullionMat);
+        mullion.position.set(mx, wallH / 2, -mullionT / 2);
+        group.add(mullion);
+      }
+    }
+  }
+
+  return group;
+}
+
 /** Adds architectural baseboard trims along the wall-floor perimeter. */
 function buildBaseboards(w: number, d: number): THREE.Group {
   const group = new THREE.Group();
@@ -196,6 +281,13 @@ export function generateRoomGeometry(room: RoomModel): THREE.Group {
     wall.position.copy(def.pos);
     wall.rotation.y = def.rotY;
     wall.name = `wall-${def.key}`;
+
+    // Add architectural wall treatments if specified
+    if (room.wallStyle && room.wallStyle !== 'painted_drywall') {
+      const treatments = buildWallTreatments(def.length, h, room.wallStyle, openings, isPresentation);
+      wall.add(treatments);
+    }
+
     root.add(wall);
   });
 

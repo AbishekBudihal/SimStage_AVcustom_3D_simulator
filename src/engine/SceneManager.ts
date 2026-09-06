@@ -15,6 +15,7 @@ import { generateRoomGeometry } from '../room/RoomGenerator';
 import { renderSeating } from '../room/SeatingRenderer';
 import { renderEquipment } from '../room/EquipmentRenderer';
 import { renderRacks } from '../room/RackRenderer';
+import { renderCeilingFixtures } from '../room/LightingRenderer';
 import { CameraController } from './CameraController';
 import { loadDefaultCatalog } from '../catalog/loadCatalog';
 import type { CheckStatus, DisplayPlacement } from '../av/ViewingDistanceEngine';
@@ -64,16 +65,20 @@ export class SceneManager {
   readonly cameraController: CameraController;
 
   private roomGroup = new THREE.Group();
+  private lightingGroup = new THREE.Group();
   private seatingGroup = new THREE.Group();
   private equipmentGroup = new THREE.Group();
   private rackGroup = new THREE.Group();
   private analysisGroup = new THREE.Group();
   private cableGroup = new THREE.Group();
+  private hemiLight!: THREE.HemisphereLight;
+  private sunLight!: THREE.DirectionalLight;
   private transformControls: TransformControls;
   private selectedMesh: THREE.Object3D | null = null;
   private heatmapMesh: THREE.Mesh | null = null;
 
   private lastRoomSignature = '';
+  private lastLightingSignature = '';
   private lastSeatsSignature = '';
   private lastEquipSignature = '';
   private lastRacksSignature = '';
@@ -93,7 +98,7 @@ export class SceneManager {
 
   constructor(private container: HTMLElement, private state: AppState) {
     this.scene.background = new THREE.Color(0xf2f1ee);
-    this.scene.add(this.roomGroup, this.seatingGroup, this.equipmentGroup, this.rackGroup, this.analysisGroup, this.cableGroup);
+    this.scene.add(this.roomGroup, this.lightingGroup, this.seatingGroup, this.equipmentGroup, this.rackGroup, this.analysisGroup, this.cableGroup);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.shadowMap.enabled = true;
@@ -123,17 +128,56 @@ export class SceneManager {
   }
 
   private setupLighting(): void {
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x60564a, 0.9);
-    this.scene.add(hemi);
-    const sun = new THREE.DirectionalLight(0xffffff, 1.1);
-    sun.position.set(6, 10, 4);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.left = -12;
-    sun.shadow.camera.right = 12;
-    sun.shadow.camera.top = 12;
-    sun.shadow.camera.bottom = -12;
-    this.scene.add(sun);
+    this.hemiLight = new THREE.HemisphereLight(0xffffff, 0x60564a, 0.9);
+    this.scene.add(this.hemiLight);
+    this.sunLight = new THREE.DirectionalLight(0xffffff, 1.1);
+    this.sunLight.position.set(6, 10, 4);
+    this.sunLight.castShadow = true;
+    this.sunLight.shadow.mapSize.set(2048, 2048);
+    this.sunLight.shadow.camera.left = -12;
+    this.sunLight.shadow.camera.right = 12;
+    this.sunLight.shadow.camera.top = 12;
+    this.sunLight.shadow.camera.bottom = -12;
+    this.scene.add(this.sunLight);
+  }
+
+  private tuneEnvironmentalLighting(style?: string): void {
+    if (!this.hemiLight || !this.sunLight) return;
+    switch (style) {
+      case 'linear_pendants':
+        // Warm balanced 3500K architectural tone
+        this.hemiLight.color.setHex(0xfff7ed);
+        this.hemiLight.groundColor.setHex(0x544a42);
+        this.hemiLight.intensity = 0.95;
+        this.sunLight.color.setHex(0xfff5ea);
+        this.sunLight.intensity = 1.05;
+        break;
+      case 'downlights':
+        // Focused 3000K warm accents
+        this.hemiLight.color.setHex(0xfff2e6);
+        this.hemiLight.groundColor.setHex(0x423b36);
+        this.hemiLight.intensity = 0.85;
+        this.sunLight.color.setHex(0xfff1de);
+        this.sunLight.intensity = 1.15;
+        break;
+      case 'perimeter_cove':
+        // Soft indirect 3000K warm wash
+        this.hemiLight.color.setHex(0xfff4e6);
+        this.hemiLight.groundColor.setHex(0x48423d);
+        this.hemiLight.intensity = 1.05;
+        this.sunLight.color.setHex(0xfffaed);
+        this.sunLight.intensity = 0.95;
+        break;
+      case 'recessed_troffers':
+      default:
+        // Crisp 4000K commercial neutral white
+        this.hemiLight.color.setHex(0xffffff);
+        this.hemiLight.groundColor.setHex(0x60564a);
+        this.hemiLight.intensity = 0.9;
+        this.sunLight.color.setHex(0xffffff);
+        this.sunLight.intensity = 1.1;
+        break;
+    }
   }
 
   private resize(): void {
@@ -157,9 +201,18 @@ export class SceneManager {
         this.roomGroup.add(generateRoomGeometry(room));
         if (!this.state.viewerMode.active) this.cameraController.frameRoom(room.width, room.depth, room.height);
       }
+
+      // Sync environmental lighting & ceiling fixtures (§17, §18)
+      const lightingSig = `${room.lightingStyle}_${room.width}_${room.depth}_${room.height}`;
+      if (lightingSig !== this.lastLightingSignature) {
+        this.lastLightingSignature = lightingSig;
+        this.tuneEnvironmentalLighting(room.lightingStyle);
+        while (this.lightingGroup.children.length) this.lightingGroup.remove(this.lightingGroup.children[0]);
+        this.lightingGroup.add(renderCeilingFixtures(room));
+      }
     }
 
-    const seatsSig = JSON.stringify(this.state.seats) + JSON.stringify(this.state.tables);
+    const seatsSig = JSON.stringify(this.state.seats) + JSON.stringify(this.state.tables) + (room?.furnitureStyle ?? '');
     const racksSig = JSON.stringify(this.state.racks);
     const equipSig = JSON.stringify(this.state.equipment);
     const selectionSig = JSON.stringify(this.state.selection) + JSON.stringify(this.state.highlightedSeatIds);
@@ -197,7 +250,7 @@ export class SceneManager {
         ...this.state.highlightedSeatIds
       ];
       while (this.seatingGroup.children.length) this.seatingGroup.remove(this.seatingGroup.children[0]);
-      this.seatingGroup.add(renderSeating(this.state.seats, this.state.tables, showStatus ? statuses : undefined, selectedIds));
+      this.seatingGroup.add(renderSeating(this.state.seats, this.state.tables, showStatus ? statuses : undefined, selectedIds, room?.furnitureStyle));
     }
 
     if (equipSig !== this.lastEquipSignature || selectionSig !== this.lastSelectionSignature) {
