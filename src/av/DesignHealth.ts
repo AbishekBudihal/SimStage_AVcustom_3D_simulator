@@ -52,9 +52,9 @@ const SUBSYSTEM_MAP: Record<HealthSubsystem, { label: string; categories: Findin
   camera: { label: 'Camera Coverage', categories: ['camera'] },
   microphone: { label: 'Microphone Coverage', categories: ['microphone'] },
   audio: { label: 'Speaker / Audio', categories: ['audio'] },
-  connectivity: { label: 'Connectivity', categories: ['system'] },
+  connectivity: { label: 'Connectivity & Power', categories: ['system', 'power'] },
   rack: { label: 'AV Rack', categories: ['rack'] },
-  placement: { label: 'Placement', categories: ['equipment', 'furniture', 'seating'] }
+  placement: { label: 'Placement & Architecture', categories: ['equipment', 'furniture', 'seating', 'room'] }
 };
 
 function subsystemFor(category: FindingCategory): HealthSubsystem | null {

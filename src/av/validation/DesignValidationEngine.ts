@@ -19,6 +19,8 @@ import { BUILTIN_CHECKS } from './builtinChecks';
 import { SYSTEM_CHECKS } from './systemChecks';
 import { RACK_CHECKS } from './rackChecks';
 import { CABLE_CHECKS } from './cableChecks';
+import { ROOM_CHECKS } from './roomChecks';
+import { POWER_CHECKS } from './powerChecks';
 import type { ProjectValidationContext } from './ValidationContext';
 import type { ValidationFinding } from './ValidationTypes';
 

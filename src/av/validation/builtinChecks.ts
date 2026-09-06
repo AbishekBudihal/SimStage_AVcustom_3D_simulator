@@ -956,6 +956,9 @@ export const checkCameraCoverageInsufficient: ValidationCheck = {
   }
 };
 
+import { ROOM_CHECKS } from './roomChecks';
+import { POWER_CHECKS } from './powerChecks';
+
 export const BUILTIN_CHECKS: ValidationCheck[] = [
   checkDisplayData,
   checkDisplayOpenings,
@@ -979,5 +982,7 @@ export const BUILTIN_CHECKS: ValidationCheck[] = [
   checkCameraBlockedSightline,
   checkCameraCoverageInsufficient,
   ...FURNITURE_CHECKS,
-  ...EQUIPMENT_CHECKS
+  ...EQUIPMENT_CHECKS,
+  ...ROOM_CHECKS,
+  ...POWER_CHECKS
 ];
