@@ -22,6 +22,18 @@ import { validationReportFor } from '../../av/validation/validationCache';
 import { usedRackUnits } from '../../av/AVRack';
 import { renderRackScheduleSection } from './RackSchedulePanel';
 import { inspectSeat } from '../../av/SeatInspection';
+import {
+  getRoomTemplate,
+  getAllRoomTemplates,
+  applyRoomTemplate,
+  computeSemanticZones
+} from '../../room/RoomTemplates';
+import type {
+  RoomType,
+  FlooringType,
+  CeilingType,
+  WallStyle
+} from '../../room/RoomTemplateTypes';
 import { compatibleDestinations, compatibleSources, canConnectPorts } from '../../system/PortCompatibility';
 import { cachedCableRoute } from '../../system/CableRouter';
 import { cableRouteContext } from '../../system/cableContext';
@@ -208,23 +220,169 @@ export function renderInspectorPanel(container: HTMLElement, state: AppState): v
   }
 }
 
+function appendSelectField<T extends string>(
+  parent: HTMLElement,
+  label: string,
+  options: Array<{ value: T; label: string }>,
+  current: T,
+  onChange: (val: T) => void
+): void {
+  const wrap = document.createElement('div');
+  wrap.className = 'field';
+  const lab = document.createElement('label');
+  lab.textContent = label;
+  const sel = document.createElement('select');
+  options.forEach((o) => {
+    const opt = document.createElement('option');
+    opt.value = o.value;
+    opt.textContent = o.label;
+    if (o.value === current) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  sel.onchange = () => onChange(sel.value as T);
+  wrap.append(lab, sel);
+  parent.appendChild(wrap);
+}
+
 function renderRoomInspector(body: HTMLElement, state: AppState): void {
   const room = state.room;
   if (!room) return;
+
+  // 1. Room Archetypes (§16)
+  const archSection = section(body, 'Room Archetype (§16)', true);
+  const typeChips = document.createElement('div');
+  typeChips.style.display = 'flex';
+  typeChips.style.flexWrap = 'wrap';
+  typeChips.style.gap = '4px';
+  typeChips.style.marginBottom = '8px';
+
+  const templates = getAllRoomTemplates();
+  templates.forEach((t) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-sm' + (room.templateId === t.id ? ' primary' : '');
+    btn.style.fontSize = '10.5px';
+    btn.style.padding = '3px 7px';
+    btn.textContent = t.label;
+    btn.onclick = () => {
+      const updated = applyRoomTemplate(room, t);
+      state.setRoom(updated);
+      state.regenerateSeating();
+    };
+    typeChips.appendChild(btn);
+  });
+  archSection.appendChild(typeChips);
+
+  const activeTemplate = getRoomTemplate(room.templateId ?? (room.useCase as RoomType) ?? 'conference');
+  const descEl = document.createElement('div');
+  descEl.className = 'badge-note';
+  descEl.style.marginBottom = '6px';
+  descEl.textContent = `${activeTemplate.description} Typical capacity: ${activeTemplate.typicalCapacity[0]}–${activeTemplate.typicalCapacity[1]} people.`;
+  archSection.appendChild(descEl);
+
+  // 2. Geometry
   const geo = section(body, 'Geometry', true);
-  numField(geo, 'Width (m)', room.width, 0.1, (v) => state.setRoom({ ...room, width: v }));
-  numField(geo, 'Length (m)', room.depth, 0.1, (v) => state.setRoom({ ...room, depth: v }));
-  numField(geo, 'Height (m)', room.height, 0.1, (v) => state.setRoom({ ...room, height: v }));
+  numField(geo, 'Width (m)', room.width, 0.1, (v) => {
+    const updated = { ...room, width: v };
+    updated.semanticZones = computeSemanticZones(activeTemplate, v, room.depth, room.height, room.presentationWall);
+    state.setRoom(updated);
+  });
+  numField(geo, 'Length (m)', room.depth, 0.1, (v) => {
+    const updated = { ...room, depth: v };
+    updated.semanticZones = computeSemanticZones(activeTemplate, room.width, v, room.height, room.presentationWall);
+    state.setRoom(updated);
+  });
+  numField(geo, 'Height (m)', room.height, 0.1, (v) => {
+    const updated = { ...room, height: v };
+    updated.semanticZones = computeSemanticZones(activeTemplate, room.width, room.depth, v, room.presentationWall);
+    state.setRoom(updated);
+  });
+
+  // Presentation wall override
+  const walls: Array<'front' | 'back' | 'left' | 'right'> = ['front', 'back', 'left', 'right'];
+  const curWall = room.presentationWall ?? 'front';
+  const presRow = document.createElement('div');
+  presRow.className = 'field';
+  presRow.innerHTML = `<label>Presentation Wall</label>`;
+  const wallSel = document.createElement('select');
+  walls.forEach((w) => {
+    const opt = document.createElement('option');
+    opt.value = w;
+    opt.textContent = w.toUpperCase();
+    if (w === curWall) opt.selected = true;
+    wallSel.appendChild(opt);
+  });
+  wallSel.onchange = () => {
+    const pw = wallSel.value as 'front' | 'back' | 'left' | 'right';
+    const updated = { ...room, presentationWall: pw };
+    updated.semanticZones = computeSemanticZones(activeTemplate, room.width, room.depth, room.height, pw);
+    state.setRoom(updated);
+  };
+  presRow.appendChild(wallSel);
+  geo.appendChild(presRow);
+
   why(
     geo,
     'Why these dimensions?',
-    'Room size is architectural. Changing it recalculates validation. Seating is not regenerated until you choose Regenerating Seating.'
+    'Room size is architectural. Changing it recalculates validation and automatically rescales semantic AV placement zones.'
   );
+
   const regen = document.createElement('button');
   regen.className = 'btn';
   regen.textContent = 'Regenerate Seating';
   regen.onclick = () => state.regenerateSeating();
-  body.appendChild(regen);
+  geo.appendChild(regen);
+
+  // 3. Architectural Finishes (§16, §17)
+  const finishSection = section(body, 'Architectural Finishes', false);
+
+  const floorOptions: Array<{ value: FlooringType; label: string }> = [
+    { value: 'corporate_carpet_tile', label: 'Corporate Carpet Tile' },
+    { value: 'executive_broadloom', label: 'Executive Broadloom' },
+    { value: 'hardwood', label: 'Natural Hardwood' },
+    { value: 'polished_concrete', label: 'Polished Concrete' },
+    { value: 'resilient_vinyl', label: 'Resilient Vinyl' }
+  ];
+  appendSelectField(finishSection, 'Flooring', floorOptions, room.flooringType ?? 'corporate_carpet_tile', (v) => {
+    state.setRoom({ ...room, flooringType: v });
+  });
+
+  const wallOptions: Array<{ value: WallStyle; label: string }> = [
+    { value: 'painted_drywall', label: 'Painted Drywall' },
+    { value: 'acoustic_fabric_panels', label: 'Acoustic Fabric Panels' },
+    { value: 'wood_paneling', label: 'Wood Paneling Accent' },
+    { value: 'glass_storefront', label: 'Glass Storefront' }
+  ];
+  appendSelectField(finishSection, 'Wall Style', wallOptions, room.wallStyle ?? 'painted_drywall', (v) => {
+    state.setRoom({ ...room, wallStyle: v });
+  });
+
+  const ceilingOptions: Array<{ value: CeilingType; label: string }> = [
+    { value: 'acoustic_grid_2x2', label: 'Acoustic Grid 2x2' },
+    { value: 'acoustic_grid_2x4', label: 'Acoustic Grid 2x4' },
+    { value: 'drywall_hardlid', label: 'Drywall Hard-Lid' },
+    { value: 'open_plenum', label: 'Open Industrial Plenum' },
+    { value: 'wood_slat', label: 'Architectural Wood Slat' }
+  ];
+  appendSelectField(finishSection, 'Ceiling Type', ceilingOptions, room.ceilingType ?? 'acoustic_grid_2x2', (v) => {
+    state.setRoom({ ...room, ceilingType: v });
+  });
+
+  // 4. Semantic AV Zones (§18)
+  const zones = room.semanticZones ?? computeSemanticZones(activeTemplate, room.width, room.depth, room.height, room.presentationWall);
+  if (zones.length > 0) {
+    const zoneSection = section(body, 'Semantic AV Placement Zones (§18)', false);
+    zones.forEach((z) => {
+      const zRow = document.createElement('div');
+      zRow.className = 'metric-row';
+      zRow.style.fontSize = '11px';
+      const wSpan = z.wall ? ` [${z.wall.toUpperCase()}]` : '';
+      const b = z.bounds;
+      const dim = `${(b.maxX - b.minX).toFixed(1)}m × ${(b.maxZ - b.minZ).toFixed(1)}m`;
+      zRow.innerHTML = `<span class="metric-label">${z.name}${wSpan}</span><span class="metric-val">${dim}</span>`;
+      zoneSection.appendChild(zRow);
+    });
+  }
 }
 
 function renderTableInspector(body: HTMLElement, state: AppState, tableId: string): void {

@@ -45,6 +45,16 @@ export interface RoomZone {
   maxZ: number;
 }
 
+import type {
+  RoomType,
+  CeilingType,
+  LightingStyle,
+  FlooringType,
+  WallStyle,
+  FurnitureStyle,
+  SemanticZone
+} from './RoomTemplateTypes';
+
 export interface RoomModel {
   id: string;
   width: number;   // meters, X axis
@@ -68,6 +78,15 @@ export interface RoomModel {
   /** Flexible/divisible rooms. Partition geometry is not simulated. */
   divisible?: boolean;
   zones?: RoomZone[];
+  /** Template archetype ID (§16) */
+  templateId?: RoomType;
+  ceilingType?: CeilingType;
+  lightingStyle?: LightingStyle;
+  flooringType?: FlooringType;
+  wallStyle?: WallStyle;
+  furnitureStyle?: FurnitureStyle;
+  /** Semantic AV equipment placement zones (§18) */
+  semanticZones?: SemanticZone[];
 }
 
 export function createDefaultRoom(useCase: string = 'conference'): RoomModel {
@@ -82,6 +101,12 @@ export function createDefaultRoom(useCase: string = 'conference'): RoomModel {
       { id: generateOpeningId('door'), wall: 'front', offset: 3.6, width: 1.0, height: 2.1, sillHeight: 0, kind: 'door' }
     ],
     columns: [],
-    useCase
+    useCase,
+    templateId: (useCase as RoomType) || 'conference',
+    ceilingType: 'acoustic_grid_2x2',
+    lightingStyle: 'recessed_troffers',
+    flooringType: 'corporate_carpet_tile',
+    wallStyle: 'painted_drywall',
+    furnitureStyle: 'contemporary_office'
   };
 }
