@@ -38,6 +38,9 @@ import {
 import { buildSystemTopology } from './SystemTopologyPlan';
 import { auditGeneratedLayout, clampInsideRoom } from './SpatialAudit';
 import type { DesignOption, DesignProposal, ProductPick, ProjectDesignContext, SubsystemNote } from './DesignProposal';
+import { ROOM_TEMPLATES, computeSemanticZones } from '../room/RoomTemplates';
+import type { RoomType } from '../room/RoomTemplateTypes';
+import { explainRecommendation } from './Recommendations';
 
 function nextIdFactory(): (prefix: string) => string {
   let n = 0;
@@ -71,11 +74,26 @@ export function inventory(ctx: ProjectDesignContext, catalog: EquipmentCatalog) 
 
 function resolveRoom(ctx: ProjectDesignContext, req: DesignRequirements): RoomModel {
   if (ctx.room && req.completeMissingOnly) return ctx.room;
+  const templateKey: RoomType = req.roomType ?? (
+    req.useCase === 'video_conference' ? 'boardroom' :
+    req.useCase === 'meeting' ? 'conference' :
+    req.useCase === 'training' ? 'training' :
+    req.useCase === 'presentation' ? 'training' :
+    'conference'
+  );
+  const template = ROOM_TEMPLATES[templateKey] ?? ROOM_TEMPLATES.conference;
   const base = ctx.room ? { ...ctx.room } : createDefaultRoom(req.useCase);
   base.width = req.room.width!;
   base.depth = req.room.length!;
   base.height = req.room.height!;
   base.useCase = req.useCase;
+  base.templateId = req.roomType ?? template.id;
+  base.ceilingType = template.environment.ceiling;
+  base.lightingStyle = template.environment.lighting;
+  base.flooringType = template.environment.flooring;
+  base.wallStyle = template.environment.wallStyle;
+  base.furnitureStyle = template.environment.furnitureStyle;
+
   if (req.constraints.presentationWall) base.presentationWall = req.constraints.presentationWall;
   else delete base.presentationWall;
   if (req.room.divisible) {
@@ -86,6 +104,7 @@ function resolveRoom(ctx: ProjectDesignContext, req: DesignRequirements): RoomMo
   if (!req.constraints.presentationWall) {
     clamped.presentationWall = selectPresentationWall(clamped);
   }
+  clamped.semanticZones = computeSemanticZones(template, clamped.width, clamped.depth, clamped.height, clamped.presentationWall ?? 'front');
   return clamped;
 }
 
@@ -286,7 +305,8 @@ function evaluateDisplayProduct(
       source: 'Catalog display dimensions and the project viewing analysis',
       completeness: 'complete',
       completenessReason: 'Catalog width/height/diagonal present.',
-      alternatives: []
+      alternatives: [],
+      explanation: explainRecommendation('display', product, room, seats.length, count, { furthestDistanceM: farthest })
     }
   };
 }
@@ -326,7 +346,8 @@ function placeMics(
       source: 'Catalog pickup radius and seating positions',
       completeness: 'complete',
       completenessReason: 'pickupRadiusM present' + (product.microphone?.beamWidthDeg ? '; beamWidthDeg present' : ''),
-      alternatives: []
+      alternatives: [],
+      explanation: explainRecommendation('microphone', product, room, seats.length, design.quantity)
     }
   };
 }
@@ -366,7 +387,8 @@ function placeSpeakers(
       source: 'Catalog maxSplAt1m, dispersion, and seating positions',
       completeness: c.status,
       completenessReason: c.reason,
-      alternatives: []
+      alternatives: [],
+      explanation: explainRecommendation('speaker', product, room, seats.length, design.quantity)
     }
   };
 }
@@ -432,7 +454,8 @@ function placeCamera(
       source: 'Catalog FOV and presentation-wall placement',
       completeness: c.status,
       completenessReason: c.reason,
-      alternatives: []
+      alternatives: [],
+      explanation: explainRecommendation('camera', product, room, seats.length, 1, { fovDeg: hfov })
     }
   };
 }
@@ -799,6 +822,16 @@ export function generateDesign(
       why.push(`AV rack: ${rackReq.reason} (${rackPlace.note})`);
     } else {
       why.push(`AV rack: ${rackReq.reason}`);
+    }
+
+    const switchEq = rawEquipment.find((e) => {
+      const p = catalog.get(e.productId);
+      return p?.category === 'network' || p?.category === 'switcher';
+    });
+    if (switchEq) {
+      const p = catalog.get(switchEq.productId)!;
+      const sysExp = explainRecommendation('system', p, room, seating.seats.length, 1);
+      why.push(`System Infrastructure: ${sysExp.rationale}`);
     }
 
     why.push(

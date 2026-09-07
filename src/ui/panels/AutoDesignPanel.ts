@@ -4,6 +4,8 @@ import { LEARN_TOPICS } from '../../autodesign/Recommendations';
 import { selectedOption } from '../../autodesign/DesignPipeline';
 import type { DesignOption } from '../../autodesign/DesignProposal';
 import { loadDefaultCatalog } from '../../catalog/loadCatalog';
+import { ROOM_TEMPLATES } from '../../room/RoomTemplates';
+import type { RoomType } from '../../room/RoomTemplateTypes';
 
 const catalog = loadDefaultCatalog();
 
@@ -95,6 +97,70 @@ function renderWizard(card: HTMLElement, state: AppState): void {
   const body = document.createElement('div');
   body.className = 'ad-body';
   const d = state.autoDesignDraft;
+
+  // Architectural Room Archetype Selection (§16, §1)
+  const archSection = document.createElement('div');
+  archSection.className = 'ad-archetypes';
+  archSection.style.cssText = 'margin: 6px 0 12px 0;';
+  const archLabel = document.createElement('div');
+  archLabel.style.cssText = 'font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.5px;';
+  archLabel.textContent = 'Room Archetype';
+  archSection.appendChild(archLabel);
+
+  const archRow = document.createElement('div');
+  archRow.style.cssText = 'display: flex; gap: 6px; flex-wrap: wrap;';
+
+  const archetypes: Array<{ id: RoomType; label: string; icon: string }> = [
+    { id: 'boardroom', label: 'Boardroom', icon: '🏛️' },
+    { id: 'conference', label: 'Conference', icon: '👥' },
+    { id: 'huddle', label: 'Huddle', icon: '💬' },
+    { id: 'training', label: 'Training', icon: '🎓' },
+    { id: 'classroom', label: 'Classroom', icon: '📚' },
+    { id: 'executive', label: 'Executive', icon: '💼' },
+    { id: 'multipurpose', label: 'Multipurpose', icon: '📐' }
+  ];
+
+  const currentType = d.roomType ?? (d.useCase === 'video_conference' ? 'boardroom' : d.useCase === 'training' ? 'training' : 'conference');
+
+  archetypes.forEach((arch) => {
+    const ab = document.createElement('button');
+    ab.type = 'button';
+    const isActive = currentType === arch.id;
+    ab.className = 'ad-mode' + (isActive ? ' active' : '');
+    ab.style.cssText = `padding: 5px 9px; font-size: 11px; cursor: pointer; border-radius: 4px; ${isActive ? 'background: var(--accent, #3b82f6); color: #fff; border-color: transparent;' : ''}`;
+    ab.textContent = `${arch.icon} ${arch.label}`;
+    ab.onclick = () => {
+      const tmpl = ROOM_TEMPLATES[arch.id] ?? ROOM_TEMPLATES.conference;
+      const avgCapacity = Math.round((tmpl.typicalCapacity[0] + tmpl.typicalCapacity[1]) / 2);
+      state.setAutoDesignDraft({
+        ...d,
+        roomType: arch.id,
+        room: {
+          ...d.room,
+          width: tmpl.defaultDimensions.width,
+          length: tmpl.defaultDimensions.depth,
+          height: tmpl.defaultDimensions.height
+        },
+        seating: {
+          ...d.seating,
+          count: avgCapacity
+        },
+        useCase: (arch.id === 'training' || arch.id === 'classroom') ? 'training' : (arch.id === 'huddle' || arch.id === 'boardroom') ? 'video_conference' : 'meeting',
+        presentation: {
+          ...d.presentation,
+          displayCount: tmpl.recommendedAv.minDisplays > 1 ? 'dual' : 'single'
+        },
+        audio: {
+          ...d.audio,
+          speakerPreference: tmpl.recommendedAv.speakerDistribution.includes('ceiling') ? 'ceiling' : 'wall'
+        }
+      });
+      state.notify();
+    };
+    archRow.appendChild(ab);
+  });
+  archSection.appendChild(archRow);
+  body.appendChild(archSection);
 
   if (state.autoDesignMode === 'quick') {
     note(body, 'Enter the room size, how many people, and how the room is used. Then generate a starting design. You can inspect and change everything after Apply.');
@@ -397,6 +463,21 @@ function renderProposal(card: HTMLElement, state: AppState): void {
       act.className = 'muted';
       act.textContent = `Result: ${pick.actual}`;
       box.append(crit, act);
+    }
+    if (pick.explanation) {
+      const expBox = document.createElement('div');
+      expBox.style.cssText = 'margin-top: 8px; padding: 8px 10px; background: rgba(59, 130, 246, 0.08); border-left: 3px solid var(--accent, #3b82f6); border-radius: 4px; font-size: 11px;';
+      const headline = document.createElement('div');
+      headline.style.cssText = 'font-weight: 600; color: var(--text-primary); margin-bottom: 3px;';
+      headline.textContent = `Rationale: ${pick.explanation.headline}`;
+      const rationale = document.createElement('div');
+      rationale.style.cssText = 'color: var(--text-secondary); line-height: 1.4;';
+      rationale.textContent = pick.explanation.rationale;
+      const std = document.createElement('div');
+      std.style.cssText = 'color: var(--accent, #3b82f6); font-size: 10px; margin-top: 4px; font-weight: 500;';
+      std.textContent = `Standards: ${pick.explanation.standardsCited.join(' • ')}`;
+      expBox.append(headline, rationale, std);
+      box.appendChild(expBox);
     }
     pick.alternatives.forEach((a) => {
       const alt = document.createElement('div');

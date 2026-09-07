@@ -6,6 +6,7 @@
 import type { EquipmentCategory } from '../catalog/EquipmentCatalog';
 import type { SeatingLayout } from '../room/SeatingGenerator';
 import type { WallKey } from '../room/RoomGeometry';
+import type { RoomType } from '../room/RoomTemplateTypes';
 
 export type AutoDesignMode = 'quick' | 'guided' | 'expert';
 
@@ -23,6 +24,8 @@ export type SpeakerPref = 'ceiling' | 'wall' | 'no_preference';
 
 export interface DesignRequirements {
   mode: AutoDesignMode;
+  /** Architectural Room Template Archetype (§16, §1) */
+  roomType?: RoomType;
   room: {
     /** World Z extent (presentation axis). UI label: Length. */
     length: number | null;
@@ -40,6 +43,8 @@ export interface DesignRequirements {
     displayCount: DisplayCountPref;
     sizeMinIn?: number;
     sizeMaxIn?: number;
+    byodWireless?: boolean;
+    tablePatch?: boolean;
   };
   audio: {
     required: boolean;
@@ -52,6 +57,14 @@ export interface DesignRequirements {
   };
   camera: {
     required: CameraRequirement;
+  };
+  networking?: {
+    dedicatedSwitch?: boolean;
+    poeRequired?: boolean;
+  };
+  control?: {
+    touchPanel?: boolean;
+    keypad?: boolean;
   };
   system: {
     switchingRequired: boolean | 'auto';
@@ -77,13 +90,16 @@ export interface DesignRequirements {
 export function defaultQuickRequirements(): DesignRequirements {
   return {
     mode: 'quick',
+    roomType: 'conference',
     room: { length: 10, width: 8, height: 3 },
     seating: { count: 12, layout: 'auto' },
     useCase: 'video_conference',
-    presentation: { displayCount: 'no_preference' },
+    presentation: { displayCount: 'no_preference', byodWireless: true, tablePatch: true },
     audio: { required: true, priority: 'speech', speakerPreference: 'ceiling' },
     microphones: { required: true, typePreference: 'no_preference' },
     camera: { required: 'required' },
+    networking: { dedicatedSwitch: true, poeRequired: true },
+    control: { touchPanel: true },
     system: { switchingRequired: 'auto', dspRequired: 'auto', controlRequired: false },
     preferences: { manufacturers: [], categories: [] },
     constraints: {

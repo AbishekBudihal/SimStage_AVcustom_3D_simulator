@@ -8,6 +8,7 @@ import type { RequirementIssue } from './validateRequirements';
 import type { DataCompleteness as Completeness } from './CatalogCandidates';
 import type { AVRack } from '../av/AVRack';
 import type { SpatialIssue } from './SpatialAudit';
+import type { EngineeringExplanation } from './Recommendations';
 
 export interface ProductPick {
   productId: string;
@@ -22,6 +23,7 @@ export interface ProductPick {
   completenessReason: string;
   retainedExisting?: boolean;
   alternatives: Array<{ productId: string; name: string; reason: string }>;
+  explanation?: EngineeringExplanation;
 }
 
 export interface SubsystemNote {
