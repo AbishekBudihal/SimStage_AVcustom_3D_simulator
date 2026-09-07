@@ -12,6 +12,7 @@ import { NODE_W, nodeHeight, orthoPath, disciplineForCategory } from '../../syst
 import type { ResolvedPort } from '../../system/SystemTypes';
 import { validationReportFor } from '../../av/validation/validationCache';
 import { openSchematicImportModal } from './SchematicImportModal';
+import { exportAppStateToSchematic, downloadSchematicJson } from '../../schematic/SchematicExporter';
 
 const catalog = loadDefaultCatalog();
 
@@ -231,6 +232,10 @@ function renderToolbar(state: AppState, container: HTMLElement): HTMLElement {
     mkBtn('Import Schematic', () => {
       const host = (container.closest('#app-root') as HTMLElement) || document.body;
       openSchematicImportModal(host, state);
+    }),
+    mkBtn('Export Schematic', () => {
+      const graph = exportAppStateToSchematic(state);
+      downloadSchematicJson(graph, `${state.room?.useCase ?? 'system'}-schematic.json`);
     }),
     mkBtn('Auto Layout', () => state.autoLayoutSystem()),
     mkBtn('Group', () => state.groupSelected()),

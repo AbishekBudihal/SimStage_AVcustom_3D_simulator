@@ -1,4 +1,4 @@
-﻿/**
+/**
  * SchematicImportModal.ts
  * Modal dialog for importing, validating, analyzing, and synchronizing
  * 2D AV schematics into the 3D workspace.
@@ -16,6 +16,7 @@ import { analyzeSchematic } from '../../schematic/SchematicAnalyzer';
 import { syncSchematicTo3D, type SyncResult } from '../../schematic/Schematic3DSync';
 import { boardroomSchematic, huddleSchematic } from '../../schematic/demoSchematics';
 import type { AnalyzedSchematicPayload } from '../../schematic/SchematicTypes';
+import { exportAppStateToSchematic, downloadSchematicJson } from '../../schematic/SchematicExporter';
 
 export function openSchematicImportModal(host: HTMLElement, state: AppState): void {
   // Remove existing instance if open
@@ -72,6 +73,11 @@ export function openSchematicImportModal(host: HTMLElement, state: AppState): vo
   let currentJson = JSON.stringify(boardroomSchematic(), null, 2);
   let analyzedPayload: AnalyzedSchematicPayload | null = null;
 
+  const btnCurrent = document.createElement('button');
+  btnCurrent.type = 'button';
+  btnCurrent.className = 'setup-choice';
+  btnCurrent.textContent = 'Current Workspace Design';
+
   const btnBoardroom = document.createElement('button');
   btnBoardroom.type = 'button';
   btnBoardroom.className = 'setup-choice active';
@@ -87,7 +93,7 @@ export function openSchematicImportModal(host: HTMLElement, state: AppState): vo
   btnEmpty.className = 'setup-choice';
   btnEmpty.textContent = 'Clear / Blank Template';
 
-  presetRow.append(btnBoardroom, btnHuddle, btnEmpty);
+  presetRow.append(btnCurrent, btnBoardroom, btnHuddle, btnEmpty);
   card.appendChild(presetRow);
 
   // Editor Section
@@ -122,13 +128,17 @@ export function openSchematicImportModal(host: HTMLElement, state: AppState): vo
 
   // Update presets handler
   const setPreset = (jsonStr: string, activeBtn: HTMLButtonElement) => {
-    [btnBoardroom, btnHuddle, btnEmpty].forEach((b) => b.classList.remove('active'));
+    [btnCurrent, btnBoardroom, btnHuddle, btnEmpty].forEach((b) => b.classList.remove('active'));
     activeBtn.classList.add('active');
     textarea.value = jsonStr;
     currentJson = jsonStr;
     runAnalysis();
   };
 
+  btnCurrent.onclick = () => {
+    const exported = exportAppStateToSchematic(state);
+    setPreset(JSON.stringify(exported, null, 2), btnCurrent);
+  };
   btnBoardroom.onclick = () => setPreset(JSON.stringify(boardroomSchematic(), null, 2), btnBoardroom);
   btnHuddle.onclick = () => setPreset(JSON.stringify(huddleSchematic(), null, 2), btnHuddle);
   btnEmpty.onclick = () =>
@@ -161,6 +171,19 @@ export function openSchematicImportModal(host: HTMLElement, state: AppState): vo
   clearInput.checked = true;
   clearExistingCheck.append(clearInput, document.createTextNode('Clear existing workspace equipment before sync'));
 
+  const btnDownloadJson = document.createElement('button');
+  btnDownloadJson.type = 'button';
+  btnDownloadJson.className = 'btn';
+  btnDownloadJson.textContent = 'Download JSON';
+  btnDownloadJson.onclick = () => {
+    try {
+      const parsed = JSON.parse(textarea.value);
+      downloadSchematicJson(parsed, 'schematic.json');
+    } catch {
+      alert('Cannot download: invalid JSON in editor.');
+    }
+  };
+
   const btnAnalyze = document.createElement('button');
   btnAnalyze.type = 'button';
   btnAnalyze.className = 'btn';
@@ -172,7 +195,7 @@ export function openSchematicImportModal(host: HTMLElement, state: AppState): vo
   btnSync.textContent = 'Sync to 3D Workspace';
   btnSync.disabled = true;
 
-  actionsRow.append(btnAnalyze, btnSync);
+  actionsRow.append(btnDownloadJson, btnAnalyze, btnSync);
   card.appendChild(clearExistingCheck);
   card.appendChild(actionsRow);
 
@@ -188,7 +211,7 @@ export function openSchematicImportModal(host: HTMLElement, state: AppState): vo
         return;
       }
       const catalog = state.getCatalog();
-      const analyzed = analyzeSchematic(parseResult.graph, catalog);
+      const analyzed = analyzeSchematic(parseResult.graph, catalog, state.room ?? undefined);
       analyzedPayload = analyzed;
 
       analysisContainer.style.display = 'block';

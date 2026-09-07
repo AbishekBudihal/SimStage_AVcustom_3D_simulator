@@ -50,6 +50,8 @@ function inferMountingKind(node: SchematicNode): Placement3DTarget['mountingKind
 
 // ── 3D position resolver ─────────────────────────────────────
 
+import { getPresentationWall, presentationRotation, wallMountPoint, wallLength, type WallKey } from '../room/RoomGeometry';
+
 function resolvePosition(
   node: SchematicNode,
   mountKind: Placement3DTarget['mountingKind'],
@@ -57,15 +59,34 @@ function resolvePosition(
   wallDisplayIndex: number,
   wallDisplayTotal: number,
   ceilingIndex: number,
-  ceilingTotal: number
+  ceilingTotal: number,
+  roomContext?: RoomModel
 ): { position: { x: number; y: number; z: number }; rotationY: number; wall?: 'front' | 'back' | 'left' | 'right' } {
   const cx = 0; // Room center X
   const cz = 0; // Room center Z
 
+  const presentationWall: WallKey = roomContext ? getPresentationWall(roomContext) : 'front';
+  const wallRot = presentationRotation(presentationWall);
+
   switch (mountKind) {
     case 'wall': {
-      // Displays go on the front wall (z = -depth/2), distributed evenly
-      const spacing = room.width / (wallDisplayTotal + 1);
+      // If roomContext is provided, place along presentationWall
+      const wallLen = roomContext ? wallLength(roomContext, presentationWall) : (presentationWall === 'front' || presentationWall === 'back' ? room.width : room.depth);
+      const spacing = wallLen / (wallDisplayTotal + 1);
+      const offsetAlongWall = spacing * (wallDisplayIndex + 1);
+
+      if (roomContext) {
+        const pt = wallMountPoint(roomContext, presentationWall, offsetAlongWall, 0.02);
+        // Camera above/below display centerline if node is camera
+        const y = node.category === 'camera' ? DISPLAY_CENTER_HEIGHT + 0.45 : DISPLAY_CENTER_HEIGHT;
+        return {
+          position: { x: Number(pt.x.toFixed(3)), y, z: Number(pt.z.toFixed(3)) },
+          rotationY: wallRot,
+          wall: presentationWall
+        };
+      }
+
+      // Fallback if no full roomContext
       const x = -room.width / 2 + spacing * (wallDisplayIndex + 1);
       return {
         position: { x, y: DISPLAY_CENTER_HEIGHT, z: -room.depth / 2 + 0.02 },
@@ -74,18 +95,31 @@ function resolvePosition(
       };
     }
     case 'ceiling': {
-      // Ceiling speakers/mics distributed in a grid
+      // Check for mic / speaker semantic zones if available
+      const isMic = node.category === 'microphone';
+      const micZone = roomContext?.semanticZones?.find((z) => z.kind === 'microphone_zone');
+      const spkZone = roomContext?.semanticZones?.find((z) => z.kind === 'speaker_zone');
+      const targetZone = isMic ? (micZone ?? spkZone) : spkZone;
+
+      const minX = targetZone ? targetZone.bounds.minX : -room.width / 2 + 0.5;
+      const maxX = targetZone ? targetZone.bounds.maxX : room.width / 2 - 0.5;
+      const minZ = targetZone ? targetZone.bounds.minZ : -room.depth / 2 + 0.5;
+      const maxZ = targetZone ? targetZone.bounds.maxZ : room.depth / 2 - 0.5;
+
       const cols = Math.ceil(Math.sqrt(ceilingTotal));
       const rows = Math.ceil(ceilingTotal / cols);
       const col = ceilingIndex % cols;
       const row = Math.floor(ceilingIndex / cols);
-      const spacingX = room.width / (cols + 1);
-      const spacingZ = room.depth / (rows + 1);
+      const spanX = maxX - minX;
+      const spanZ = maxZ - minZ;
+      const spacingX = spanX / (cols + 1);
+      const spacingZ = spanZ / (rows + 1);
+
       return {
         position: {
-          x: -room.width / 2 + spacingX * (col + 1),
+          x: Number((minX + spacingX * (col + 1)).toFixed(3)),
           y: room.height - CEILING_OFFSET,
-          z: -room.depth / 2 + spacingZ * (row + 1)
+          z: Number((minZ + spacingZ * (row + 1)).toFixed(3))
         },
         rotationY: 0
       };
@@ -100,9 +134,20 @@ function resolvePosition(
     case 'floor':
     case 'freestanding':
     default: {
-      // Rack / floor equipment placed in the back-right corner
+      const rackZone = roomContext?.semanticZones?.find((z) => z.kind === 'rack_zone');
+      if (rackZone) {
+        return {
+          position: {
+            x: Number(((rackZone.bounds.minX + rackZone.bounds.maxX) / 2).toFixed(3)),
+            y: 0,
+            z: Number(((rackZone.bounds.minZ + rackZone.bounds.maxZ) / 2).toFixed(3))
+          },
+          rotationY: Math.PI
+        };
+      }
+      // Back-right corner default
       return {
-        position: { x: room.width / 2 - 0.4, y: 0, z: room.depth / 2 - 0.4 },
+        position: { x: Number((room.width / 2 - 0.4).toFixed(3)), y: 0, z: Number((room.depth / 2 - 0.4).toFixed(3)) },
         rotationY: Math.PI
       };
     }
@@ -211,7 +256,8 @@ export function analyzeSchematic(
       wallIdx >= 0 ? wallIdx : 0,
       finalWallNodes.length || 1,
       ceilIdx >= 0 ? ceilIdx : 0,
-      finalCeilingNodes.length || 1
+      finalCeilingNodes.length || 1,
+      roomContext
     );
 
     const placement: Placement3DTarget = {

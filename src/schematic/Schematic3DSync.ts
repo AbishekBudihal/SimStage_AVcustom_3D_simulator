@@ -148,6 +148,14 @@ export function syncSchematicTo3D(
     rackId = rack.id;
     rackCreated = true;
 
+    // Position rack in rack_zone if room defines one
+    const rackZone = state.room?.semanticZones?.find((z) => z.kind === 'rack_zone');
+    if (rackZone) {
+      const rx = Number(((rackZone.bounds.minX + rackZone.bounds.maxX) / 2).toFixed(2));
+      const rz = Number(((rackZone.bounds.minZ + rackZone.bounds.maxZ) / 2).toFixed(2));
+      state.updateRack(rack.id, { x: rx, z: rz });
+    }
+
     // Assign rack-mounted equipment
     for (const placement of payload.placements) {
       if (placement.mountingKind !== 'rack') continue;
