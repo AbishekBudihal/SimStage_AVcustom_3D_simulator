@@ -521,10 +521,13 @@ export class SceneManager {
   }
 
   private updateTransformVisibility(): void {
+    const isTransformable =
+      this.state.selection.kind === 'equipment' ||
+      this.state.selection.kind === 'rack';
     const show =
       this.state.viewMode === '3d' &&
       !this.state.viewerMode.active &&
-      this.state.selection.kind === 'equipment' &&
+      isTransformable &&
       !!this.selectedMesh;
     this.transformControls.visible = show;
     if (!show) {
@@ -536,16 +539,35 @@ export class SceneManager {
 
   private attachTransformToSelection(): void {
     this.selectedMesh = null;
-    if (this.state.selection.kind !== 'equipment' || !this.state.selection.id) {
+    if (
+      (this.state.selection.kind !== 'equipment' && this.state.selection.kind !== 'rack') ||
+      !this.state.selection.id
+    ) {
       this.transformControls.detach();
       return;
     }
     const id = this.state.selection.id;
-    this.equipmentGroup.traverse((obj) => {
-      if (obj.userData?.instanceId === id && !this.selectedMesh) {
-        this.selectedMesh = obj;
+    if (this.state.selection.kind === 'equipment') {
+      this.equipmentGroup.traverse((obj) => {
+        if (obj.userData?.instanceId === id && !this.selectedMesh) {
+          this.selectedMesh = obj;
+        }
+      });
+      if (!this.selectedMesh) {
+        this.rackGroup.traverse((obj) => {
+          if (obj.userData?.instanceId === id && !this.selectedMesh) {
+            this.selectedMesh = obj;
+          }
+        });
       }
-    });
+    } else if (this.state.selection.kind === 'rack') {
+      this.rackGroup.traverse((obj) => {
+        if (obj.userData?.rackId === id && !this.selectedMesh) {
+          this.selectedMesh = obj;
+        }
+      });
+    }
+
     if (this.selectedMesh) {
       this.transformControls.attach(this.selectedMesh);
       this.transformControls.setMode(this.state.transformMode);
@@ -553,8 +575,59 @@ export class SceneManager {
   }
 
   private onTransformChange(): void {
-    if (!this.selectedMesh || this.state.selection.kind !== 'equipment' || !this.state.selection.id || !this.state.room) return;
+    if (!this.selectedMesh || !this.state.selection.id || !this.state.room) return;
     const id = this.state.selection.id;
+
+    if (this.state.selection.kind === 'rack') {
+      const rack = this.state.racks.find((r) => r.id === id);
+      if (!rack) return;
+      const halfW = rack.width / 2;
+      const halfD = rack.depth / 2;
+      const roomHalfW = this.state.room.width / 2;
+      const roomHalfD = this.state.room.depth / 2;
+
+      if (this.dragging) {
+        const clampedX = Math.max(-roomHalfW + halfW, Math.min(roomHalfW - halfW, this.selectedMesh.position.x));
+        const clampedZ = Math.max(-roomHalfD + halfD, Math.min(roomHalfD - halfD, this.selectedMesh.position.z));
+        this.state.updateRack(
+          id,
+          {
+            x: Number(clampedX.toFixed(3)),
+            z: Number(clampedZ.toFixed(3)),
+            rotationY: this.selectedMesh.rotation.y
+          },
+          { recordHistory: false }
+        );
+        return;
+      }
+
+      if (this.state.transformMode === 'rotate') {
+        const rotY = this.selectedMesh.rotation.y;
+        this.state.updateRack(id, { rotationY: rotY }, { recordHistory: false });
+        this.state.setSnapNote(`Rack rotated to ${((rotY * 180) / Math.PI).toFixed(1)}°`);
+        this.state.finishGesture();
+        return;
+      }
+
+      // Drop / snap for rack: snap to 5cm cad grid inside room
+      const snappedX = Math.round(Math.max(-roomHalfW + halfW, Math.min(roomHalfW - halfW, this.selectedMesh.position.x)) * 20) / 20;
+      const snappedZ = Math.round(Math.max(-roomHalfD + halfD, Math.min(roomHalfD - halfD, this.selectedMesh.position.z)) * 20) / 20;
+      this.selectedMesh.position.set(snappedX, this.selectedMesh.position.y, snappedZ);
+      this.state.updateRack(
+        id,
+        {
+          x: Number(snappedX.toFixed(3)),
+          z: Number(snappedZ.toFixed(3)),
+          rotationY: this.selectedMesh.rotation.y
+        },
+        { recordHistory: false }
+      );
+      this.state.setSnapNote(`Rack positioned at (${snappedX.toFixed(2)}m, ${snappedZ.toFixed(2)}m)`);
+      this.state.finishGesture();
+      return;
+    }
+
+    if (this.state.selection.kind !== 'equipment') return;
     const inst = this.state.equipment.find((e) => e.instanceId === id);
     const product = inst ? catalog.get(inst.productId) : null;
     if (!inst || !product) return;

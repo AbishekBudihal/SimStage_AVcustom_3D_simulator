@@ -35,7 +35,9 @@ import { computeAutoLayout } from '../system/SystemLayout';
 import { isRoutableProduct } from '../system/SystemRouting';
 import { canConnectPorts, canConnectWithCable, duplicateConnection, occupancyConflict, maxConnectionsFor } from '../system/PortCompatibility';
 import { resolveInstancePorts } from '../system/PortResolver';
-import { connectionsTouching, invalidateCableRoutes } from '../system/CableRouter';
+import { connectionsTouching, invalidateCableRoutes, cachedCableRoute } from '../system/CableRouter';
+import { cableRouteContext } from '../system/cableContext';
+import { equipmentWorldPosition } from '../av/RackTransform';
 import { defaultQuickRequirements, type AutoDesignMode, type DesignRequirements, type DesignUseCase } from '../autodesign/DesignRequirements';
 import { generateDesign, hasManualChanges, selectedOption } from '../autodesign/DesignPipeline';
 import type { DesignOption, DesignProposal } from '../autodesign/DesignProposal';
@@ -466,12 +468,51 @@ export class AppState {
     return rack;
   }
 
+  syncCableLengths(connectionIds?: string[]): void {
+    if (!this.connections.length) return;
+    const ctx = cableRouteContext(this, catalog);
+    const targetIds = connectionIds ? new Set(connectionIds) : null;
+    this.connections = this.connections.map((c) => {
+      if (targetIds && !targetIds.has(c.id)) return c;
+      const route = cachedCableRoute(c, ctx);
+      if (c.estimatedLengthM !== route.totalLength) {
+        return { ...c, estimatedLengthM: route.totalLength };
+      }
+      return c;
+    });
+  }
+
   updateRack(id: string, patch: Partial<AVRack>, options: { recordHistory?: boolean } = {}): void {
     if (options.recordHistory !== false) this.recordAndReset();
     const idx = this.racks.findIndex((r) => r.id === id);
     if (idx === -1) return;
-    this.racks = [...this.racks.slice(0, idx), { ...this.racks[idx], ...patch }];
-    invalidateCableRoutes();
+    const updatedRack = { ...this.racks[idx], ...patch };
+    this.racks = [...this.racks.slice(0, idx), updatedRack, ...this.racks.slice(idx + 1)];
+
+    // Synchronize world positions of all equipment mounted inside this rack
+    const rackEq = this.equipment.filter((e) => e.rackId === id);
+    if (rackEq.length > 0) {
+      this.equipment = this.equipment.map((inst) => {
+        if (inst.rackId !== id || inst.rackPositionRU == null) return inst;
+        const prod = catalog.get(inst.productId);
+        const depth = prod?.physical.depth ?? 0.35;
+        const ru = inst.rackUnits ?? prod?.rackUnits ?? 1;
+        const wp = equipmentWorldPosition(updatedRack, inst.rackPositionRU, ru, depth);
+        return {
+          ...inst,
+          position: { x: Number(wp.x.toFixed(3)), y: Number(wp.y.toFixed(3)), z: Number(wp.z.toFixed(3)) },
+          rotationY: wp.rotationY
+        };
+      });
+    }
+
+    const rackDeviceIds = new Set(rackEq.map((e) => e.instanceId));
+    const touchingIds = this.connections
+      .filter((c) => rackDeviceIds.has(c.fromInstanceId) || rackDeviceIds.has(c.toInstanceId))
+      .map((c) => c.id);
+
+    invalidateCableRoutes(touchingIds.length ? touchingIds : undefined);
+    this.syncCableLengths(touchingIds.length ? touchingIds : undefined);
     this.notify();
   }
 
@@ -491,10 +532,28 @@ export class AppState {
       }
     }
     const nextRU = rack && units ? nextFreeRU(rack, units, this.equipment.filter((e) => e.rackId === rack.id && e.instanceId !== instanceId)) : undefined;
+
+    let positionPatch: Partial<Pick<EquipmentInstance, 'position' | 'rotationY' | 'wall' | 'mountingKind'>> = {};
+    if (rack && nextRU != null) {
+      const depth = product?.physical.depth ?? 0.35;
+      const wp = equipmentWorldPosition(rack, nextRU, units ?? 1, depth);
+      positionPatch = {
+        position: { x: Number(wp.x.toFixed(3)), y: Number(wp.y.toFixed(3)), z: Number(wp.z.toFixed(3)) },
+        rotationY: wp.rotationY,
+        wall: undefined,
+        mountingKind: 'rack'
+      };
+    } else if (!rack) {
+      positionPatch = {
+        mountingKind: inst.mountingKind === 'rack' ? undefined : inst.mountingKind
+      };
+    }
+
     this.updateEquipment(instanceId, {
       rackId: rackId ?? undefined,
       rackUnits: units,
-      rackPositionRU: nextRU
+      rackPositionRU: nextRU,
+      ...positionPatch
     });
   }
 
@@ -523,14 +582,42 @@ export class AppState {
     const idx = this.equipment.findIndex((e) => e.instanceId === id);
     if (idx === -1) return;
     const prev = this.equipment[idx];
+
+    const currentRack = prev.rackId ? this.racks.find((r) => r.id === prev.rackId) : null;
+    let nextRackId = patch.rackId !== undefined ? patch.rackId : prev.rackId;
+    let nextRU = patch.rackPositionRU !== undefined ? patch.rackPositionRU : prev.rackPositionRU;
+    let nextUnits = patch.rackUnits !== undefined ? patch.rackUnits : prev.rackUnits;
+    let nextMounting = patch.mountingKind !== undefined ? patch.mountingKind : prev.mountingKind;
+
+    // Detect if rack-mounted equipment was moved outside the rack boundary
+    if (currentRack && patch.position && patch.rackId === undefined) {
+      const dx = patch.position.x - currentRack.x;
+      const dz = patch.position.z - currentRack.z;
+      const distXZ = Math.hypot(dx, dz);
+      const rackRadius = Math.max(currentRack.width, currentRack.depth) / 2 + 0.45;
+      if (distXZ > rackRadius) {
+        nextRackId = undefined;
+        nextRU = undefined;
+        nextUnits = undefined;
+        if (nextMounting === 'rack') nextMounting = undefined;
+        this.lastSnapNote = `Detached ${prev.name ?? prev.instanceId} from rack ${currentRack.id}.`;
+      }
+    }
+
     const next: EquipmentInstance = {
       ...prev,
       ...patch,
+      rackId: nextRackId,
+      rackPositionRU: nextRU,
+      rackUnits: nextUnits,
+      mountingKind: nextMounting,
       placementMode: (patch.placementMode ?? 'manual') as PlacementMode,
       origin: patch.origin ?? (prev.origin === 'auto' ? 'manual' : prev.origin)
     };
     this.equipment = [...this.equipment.slice(0, idx), next, ...this.equipment.slice(idx + 1)];
-    invalidateCableRoutes(connectionsTouching(this.connections, id));
+    const touchingIds = connectionsTouching(this.connections, id);
+    invalidateCableRoutes(touchingIds);
+    this.syncCableLengths(touchingIds);
     this.notify();
   }
 
@@ -1302,23 +1389,28 @@ export class AppState {
       return false;
     }
     this.recordAndReset();
+    const newConn: SystemConnection = {
+      id: `cx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      fromInstanceId,
+      fromPortId,
+      toInstanceId,
+      toPortId,
+      signalType: compat.signalType,
+      transport: compat.transport,
+      physicalMedium: compat.physicalMedium,
+      cableType: compat.physicalMedium
+    };
+    const ctx = cableRouteContext(this, catalog);
+    const route = cachedCableRoute(newConn, ctx);
+    newConn.estimatedLengthM = route.totalLength;
+
     this.connections = [
       ...this.connections,
-      {
-        id: `cx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        fromInstanceId,
-        fromPortId,
-        toInstanceId,
-        toPortId,
-        signalType: compat.signalType,
-        transport: compat.transport,
-        physicalMedium: compat.physicalMedium,
-        cableType: compat.physicalMedium
-      }
+      newConn
     ];
     this.lastSystemError = '';
     this.systemConnectFrom = null;
-    invalidateCableRoutes([this.connections[this.connections.length - 1]!.id]);
+    invalidateCableRoutes([newConn.id]);
     this.notify();
     return true;
   }

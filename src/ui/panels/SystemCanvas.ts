@@ -106,6 +106,14 @@ export function renderSystemCanvas(container: HTMLElement, state: AppState): voi
   state.connections.forEach((c, cIdx) => {
     if (hiddenIds.has(c.fromInstanceId) || hiddenIds.has(c.toInstanceId)) return;
     const cableId = `C-${String(cIdx + 1).padStart(3, '0')}`;
+    const lenM = c.estimatedLengthM ?? c.route?.totalLength;
+    const lenTag = lenM != null && lenM > 0 ? ` (${lenM.toFixed(1)}m)` : '';
+
+    const isOverLimit =
+      (c.physicalMedium === 'HDMI' && lenM != null && lenM > 15) ||
+      ((c.physicalMedium === 'USB' || c.physicalMedium === 'USB-C') && lenM != null && lenM > 5) ||
+      ((c.physicalMedium === 'Cat6' || c.physicalMedium === 'Cat6A') && lenM != null && lenM > 100);
+
     const muted = state.systemFilter !== 'all' && c.signalType !== state.systemFilter;
     const a = portAnchor(state, c.fromInstanceId, c.fromPortId, 'out');
     const b = portAnchor(state, c.toInstanceId, c.toPortId, 'in');
@@ -113,10 +121,10 @@ export function renderSystemCanvas(container: HTMLElement, state: AppState): voi
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', orthoPath(a.x, a.y, b.x, b.y));
     const sel = state.selectedConnectionId === c.id || state.highlightedConnectionIds.includes(c.id);
-    path.setAttribute('class', `sys-wire sig-${c.signalType}${muted ? ' muted' : ''}${sel ? ' selected' : ''}`);
+    path.setAttribute('class', `sys-wire sig-${c.signalType}${muted ? ' muted' : ''}${sel ? ' selected' : ''}${isOverLimit ? ' length-warning' : ''}`);
     path.setAttribute(
       'title',
-      `${cableId} | ${c.signalType} · ${labelPort(state, c.fromInstanceId, c.fromPortId)} → ${labelPort(state, c.toInstanceId, c.toPortId)} · Transport ${c.transport} · ${c.physicalMedium}`
+      `${cableId}${lenTag} | ${c.signalType} · ${labelPort(state, c.fromInstanceId, c.fromPortId)} → ${labelPort(state, c.toInstanceId, c.toPortId)} · Transport ${c.transport} · ${c.physicalMedium}${isOverLimit ? ' [⚠️ Length exceeds transmission limit]' : ''}`
     );
     path.onclick = (ev) => {
       ev.stopPropagation();
@@ -127,8 +135,12 @@ export function renderSystemCanvas(container: HTMLElement, state: AppState): voi
       const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       t.setAttribute('x', String((a.x + b.x) / 2));
       t.setAttribute('y', String((a.y + b.y) / 2 - 6));
-      t.setAttribute('class', 'sys-wire-label');
-      t.textContent = state.systemDetailMode === 'beginner' ? `${cableId} ${c.physicalMedium}` : `${cableId} ${c.physicalMedium} · ${c.signalType}`;
+      t.setAttribute('class', `sys-wire-label${isOverLimit ? ' wire-warn' : ''}`);
+      const warnPrefix = isOverLimit ? '⚠️ ' : '';
+      t.textContent =
+        state.systemDetailMode === 'beginner'
+          ? `${warnPrefix}${cableId} ${c.physicalMedium}${lenTag}`
+          : `${warnPrefix}${cableId} ${c.physicalMedium}${lenTag} · ${c.signalType}`;
       svg.appendChild(t);
     }
   });
@@ -328,7 +340,7 @@ function renderNode(state: AppState, instanceId: string): SVGGElement {
   addText(g, '12', '14', 'sys-node-sub', (product?.manufacturer ?? '').slice(0, 28));
   addText(g, '12', '30', 'sys-node-title', inst.name.slice(0, 26));
   addText(g, '12', '44', 'sys-node-cat', (product?.category ?? 'device').toUpperCase());
-  if (inst.rackId) addText(g, '140', '44', 'sys-node-sub', `RACK ${inst.rackId}`);
+  if (inst.rackId) addText(g, '140', '44', 'sys-node-sub', `RACK ${inst.rackId}${inst.rackPositionRU != null ? ' · ' + inst.rackPositionRU + 'RU' : ''}`);
   if (product?.provenance === 'user_defined') addText(g, '140', '14', 'sys-node-sub', '★ CUSTOM');
   if (!ports.length) addText(g, '12', '64', 'sys-node-warn', 'DATA INCOMPLETE');
 
