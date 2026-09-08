@@ -37,6 +37,9 @@ import { canConnectPorts, canConnectWithCable, duplicateConnection, occupancyCon
 import { resolveInstancePorts } from '../system/PortResolver';
 import { connectionsTouching, invalidateCableRoutes, cachedCableRoute } from '../system/CableRouter';
 import { cableRouteContext } from '../system/cableContext';
+import { cableSchedule, type CableScheduleResult } from '../system/CableSchedule';
+import { generateBom, type BomReport } from '../docs/BomGenerator';
+import { generateEngineeringReport, type EngineeringReport } from '../docs/EngineeringReport';
 import { equipmentWorldPosition } from '../av/RackTransform';
 import { defaultQuickRequirements, type AutoDesignMode, type DesignRequirements, type DesignUseCase } from '../autodesign/DesignRequirements';
 import { generateDesign, hasManualChanges, selectedOption } from '../autodesign/DesignPipeline';
@@ -466,6 +469,12 @@ export class AppState {
     this.racks = [...this.racks, rack];
     this.notify();
     return rack;
+  }
+
+  addRack(rack: AVRack): void {
+    this.recordAndReset();
+    this.racks = [...this.racks, rack];
+    this.notify();
   }
 
   syncCableLengths(connectionIds?: string[]): void {
@@ -1353,7 +1362,28 @@ export class AppState {
     this.notify();
   }
 
-  addConnection(fromInstanceId: string, fromPortId: string, toInstanceId: string, toPortId: string): boolean {
+  addConnection(conn: SystemConnection): boolean;
+  addConnection(fromInstanceId: string, fromPortId: string, toInstanceId: string, toPortId: string): boolean;
+  addConnection(
+    arg1: string | SystemConnection,
+    fromPortId?: string,
+    toInstanceId?: string,
+    toPortId?: string
+  ): boolean {
+    if (typeof arg1 === 'object') {
+      const conn = arg1;
+      this.recordAndReset();
+      const ctx = cableRouteContext(this, catalog);
+      const route = cachedCableRoute(conn, ctx);
+      const enriched = { ...conn, estimatedLengthM: conn.estimatedLengthM ?? route.totalLength };
+      this.connections = [...this.connections, enriched];
+      invalidateCableRoutes([conn.id]);
+      this.notify();
+      return true;
+    }
+
+    const fromInstanceId = arg1;
+    if (!fromPortId || !toInstanceId || !toPortId) return false;
     const fromEq = this.equipment.find((e) => e.instanceId === fromInstanceId);
     const toEq = this.equipment.find((e) => e.instanceId === toInstanceId);
     if (!fromEq || !toEq) {
@@ -1772,5 +1802,32 @@ export class AppState {
       return;
     }
     this.openAutoDesign();
+  }
+
+  /**
+   * Authoritative Bill of Materials generated deterministically from current project state.
+   */
+  getBom(): BomReport {
+    const cables = this.getCableSchedule();
+    return generateBom(this.equipment, catalog, {
+      racks: this.racks,
+      connections: this.connections,
+      cableSchedule: cables
+    });
+  }
+
+  /**
+   * Authoritative Cable Schedule generated deterministically from current connections and spatial routes.
+   */
+  getCableSchedule(): CableScheduleResult {
+    const ctx = cableRouteContext(this, catalog);
+    return cableSchedule(this.connections, this.equipment, ctx);
+  }
+
+  /**
+   * Authoritative multi-view AV Engineering Report aggregating room, equipment, health, BOM, and cabling.
+   */
+  getEngineeringReport(): EngineeringReport {
+    return generateEngineeringReport(this, catalog);
   }
 }

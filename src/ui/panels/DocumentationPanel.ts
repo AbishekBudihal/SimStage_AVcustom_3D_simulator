@@ -6,10 +6,9 @@
 
 import type { AppState } from '../../app/AppState';
 import { loadDefaultCatalog } from '../../catalog/loadCatalog';
-import { generateBom, bomToCsv } from '../../docs/BomGenerator';
-import { generateEngineeringReport, reportToText } from '../../docs/EngineeringReport';
-import { cableSchedule, cableScheduleToCsv } from '../../system/CableSchedule';
-import { cableRouteContext } from '../../system/cableContext';
+import { bomToCsv, bomToJson } from '../../docs/BomGenerator';
+import { reportToText, reportToMarkdown, reportToJson } from '../../docs/EngineeringReport';
+import { cableScheduleToCsv } from '../../system/CableSchedule';
 
 const catalog = loadDefaultCatalog();
 
@@ -56,12 +55,13 @@ export function renderDocumentationPanel(container: HTMLElement, state: AppState
 }
 
 function renderBomTab(body: HTMLElement, state: AppState): void {
-  const bom = generateBom(state.equipment, catalog);
+  const bom = state.getBom();
 
   // Summary
   const summary = document.createElement('div');
   summary.className = 'doc-summary';
-  summary.textContent = `${bom.totalItems} items · ${bom.totalUniqueProducts} unique products${bom.customDeviceCount > 0 ? ` · ${bom.customDeviceCount} custom` : ''}`;
+  const powerInfo = bom.totalPowerWatts > 0 ? ` · Power: ${bom.totalPowerWatts}W (PoE: ${bom.poePowerWatts}W)` : '';
+  summary.textContent = `${bom.totalItems} items · ${bom.totalUniqueProducts} unique lines${bom.customDeviceCount > 0 ? ` · ${bom.customDeviceCount} custom` : ''}${powerInfo}`;
   body.appendChild(summary);
 
   if (bom.lines.length === 0) {
@@ -76,26 +76,35 @@ function renderBomTab(body: HTMLElement, state: AppState): void {
   const table = document.createElement('table');
   table.className = 'doc-table';
   table.innerHTML = `<thead><tr>
-    <th>Item</th><th>Manufacturer</th><th>Model</th><th>Category</th><th>Qty</th><th>Rack</th>
+    <th>Item</th><th>Part No</th><th>Manufacturer</th><th>Model</th><th>Category</th><th>Kind</th><th>Qty</th><th>Power</th><th>Rack</th>
   </tr></thead>`;
   const tbody = document.createElement('tbody');
   bom.lines.forEach((l) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${l.itemId}</td><td>${l.manufacturer}</td><td>${l.model}</td>
-      <td>${l.category}</td><td>${l.quantity}</td><td>${l.rackMounted ? '✓' : ''}</td>`;
+    const pn = l.partNumber ? `<code>${l.partNumber}</code>` : '—';
+    const pw = l.powerWatts != null ? `${l.powerWatts} W` : '—';
+    tr.innerHTML = `<td>${l.itemId}</td><td>${pn}</td><td>${l.manufacturer}</td><td>${l.model}</td>
+      <td>${l.category}</td><td>${l.lineKind}</td><td>${l.quantity}</td><td>${pw}</td><td>${l.rackMounted ? '✓' : ''}</td>`;
     if (l.isCustomDevice) tr.classList.add('custom-device-row');
     tbody.appendChild(tr);
   });
   table.appendChild(tbody);
   body.appendChild(table);
 
-  // Export
-  addExportButton(body, 'Export BOM (CSV)', () => bomToCsv(bom), 'bom.csv');
+  // Export buttons
+  const btnRow = document.createElement('div');
+  btnRow.style.display = 'flex';
+  btnRow.style.gap = '8px';
+  btnRow.style.marginTop = '8px';
+  addExportButton(btnRow, 'Export BOM (CSV)', () => bomToCsv(bom), 'bom.csv');
+  addExportButton(btnRow, 'Export BOM (JSON)', () => bomToJson(bom), 'bom.json');
+  body.appendChild(btnRow);
 }
 
+import type { CableScheduleRow } from '../../system/CableSchedule';
+
 function renderCablesTab(body: HTMLElement, state: AppState): void {
-  const ctx = cableRouteContext(state, catalog);
-  const schedule = cableSchedule(state.connections, state.equipment, ctx);
+  const schedule = state.getCableSchedule();
 
   const summary = document.createElement('div');
   summary.className = 'doc-summary';
@@ -116,7 +125,7 @@ function renderCablesTab(body: HTMLElement, state: AppState): void {
     <th>ID</th><th>From</th><th>To</th><th>Signal</th><th>Cable</th><th>Length</th><th>Status</th>
   </tr></thead>`;
   const tbody = document.createElement('tbody');
-  schedule.rows.forEach((r) => {
+  schedule.rows.forEach((r: CableScheduleRow) => {
     const tr = document.createElement('tr');
     const statusIcon = r.routeStatus === 'clear' ? '✓' : r.routeStatus === 'intersects-obstacle' ? '⚠' : '—';
     tr.innerHTML = `<td>${r.cableId}</td><td>${r.fromName}</td><td>${r.toName}</td>
@@ -141,7 +150,7 @@ function renderRacksTab(body: HTMLElement, state: AppState): void {
     return;
   }
 
-  const report = generateEngineeringReport(state, catalog);
+  const report = state.getEngineeringReport();
   for (const rack of report.racks) {
     const rackTitle = document.createElement('div');
     rackTitle.className = 'nav-section-title';
@@ -170,7 +179,7 @@ function renderRacksTab(body: HTMLElement, state: AppState): void {
 }
 
 function renderReportTab(body: HTMLElement, state: AppState): void {
-  const report = generateEngineeringReport(state, catalog);
+  const report = state.getEngineeringReport();
   const text = reportToText(report);
 
   const pre = document.createElement('pre');
@@ -178,7 +187,14 @@ function renderReportTab(body: HTMLElement, state: AppState): void {
   pre.textContent = text;
   body.appendChild(pre);
 
-  addExportButton(body, 'Export Report (TXT)', () => text, 'engineering-report.txt');
+  const btnRow = document.createElement('div');
+  btnRow.style.display = 'flex';
+  btnRow.style.gap = '8px';
+  btnRow.style.marginTop = '8px';
+  addExportButton(btnRow, 'Export Report (TXT)', () => text, 'engineering-report.txt');
+  addExportButton(btnRow, 'Export Report (Markdown)', () => reportToMarkdown(report), 'engineering-report.md');
+  addExportButton(btnRow, 'Export Report (JSON)', () => reportToJson(report), 'engineering-report.json');
+  body.appendChild(btnRow);
 }
 
 function addExportButton(parent: HTMLElement, label: string, getData: () => string, filename: string): void {
