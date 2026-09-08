@@ -603,3 +603,252 @@ button:focus-visible, input:focus-visible, select:focus-visible, .nav-item:focus
 .sub-tab:hover { color: var(--text-primary); }
 .sub-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
+/* ── Design Health HUD & Click-to-Fix (§22, §28) ── */
+.design-health-hud-root {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  pointer-events: auto;
+  font-family: var(--font, system-ui, sans-serif);
+}
+
+.health-hud-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  background: var(--bg-panel, #ffffff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 20px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease-in-out;
+}
+.health-hud-pill:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
+}
+.health-hud-pill.active {
+  border-color: var(--accent, #2563eb);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.health-hud-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: #ffffff;
+}
+.health-hud-pill.status-good .health-hud-badge { background: #16a34a; }
+.health-hud-pill.status-fair .health-hud-badge { background: #d97706; }
+.health-hud-pill.status-poor .health-hud-badge { background: #dc2626; }
+
+.health-hud-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary, #1e293b);
+}
+
+.health-hud-fix-count {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.health-hud-popover {
+  margin-top: 8px;
+  width: 360px;
+  max-height: 520px;
+  overflow-y: auto;
+  background: var(--bg-panel, #ffffff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
+  padding: 12px;
+  animation: hudFadeIn 0.15s ease-out;
+}
+
+@keyframes hudFadeIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.health-hud-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+}
+.health-hud-header-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.health-hud-score-large {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 800;
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  color: #ffffff;
+}
+.health-hud-score-large.status-good { background: #16a34a; }
+.health-hud-score-large.status-fair { background: #d97706; }
+.health-hud-score-large.status-poor { background: #dc2626; }
+
+.health-hud-close {
+  background: transparent;
+  border: none;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--text-tertiary, #94a3b8);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.health-hud-close:hover {
+  color: var(--text-primary, #1e293b);
+  background: var(--bg-panel-alt, #f1f5f9);
+}
+
+.health-hud-subsystems {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.health-hud-sub-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+}
+.health-hud-sub-name {
+  width: 90px;
+  color: var(--text-secondary, #64748b);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.health-hud-sub-track {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-panel-alt, #e2e8f0);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.health-hud-sub-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.health-hud-sub-fill.status-good { background: #16a34a; }
+.health-hud-sub-fill.status-fair { background: #d97706; }
+.health-hud-sub-fill.status-poor { background: #dc2626; }
+.health-hud-sub-val {
+  width: 28px;
+  text-align: right;
+  font-weight: 600;
+  color: var(--text-primary, #1e293b);
+}
+
+.health-hud-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-tertiary, #94a3b8);
+  margin: 10px 0 6px;
+}
+
+.health-hud-deductions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.health-hud-card {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--bg-panel-alt, #f8fafc);
+  border-left: 3px solid var(--accent, #2563eb);
+}
+.health-hud-card.error { border-left-color: #dc2626; }
+.health-hud-card.warning { border-left-color: #d97706; }
+
+.health-hud-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.health-hud-card-code {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary, #64748b);
+}
+.health-hud-card-penalty {
+  font-size: 10px;
+  font-weight: 700;
+  color: #dc2626;
+}
+.health-hud-card.warning .health-hud-card-penalty {
+  color: #d97706;
+}
+
+.health-hud-card-msg {
+  font-size: 11px;
+  color: var(--text-primary, #1e293b);
+  line-height: 1.35;
+  margin-bottom: 4px;
+}
+
+.health-hud-card-aff {
+  font-size: 10px;
+  color: var(--text-tertiary, #94a3b8);
+  margin-bottom: 6px;
+}
+
+.health-hud-card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.health-hud-fix-btn {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  font-weight: 600;
+}
+.health-hud-fix-btn:hover {
+  background: #1d4ed8 !important;
+}
+
+.health-hud-all-clean {
+  font-size: 11px;
+  color: #16a34a;
+  font-weight: 500;
+  padding: 12px 8px;
+  text-align: center;
+  background: rgba(22, 163, 74, 0.08);
+  border-radius: 6px;
+}
+

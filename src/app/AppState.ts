@@ -22,7 +22,7 @@ import {
   type TablePresetId
 } from '../room/ParametricTable';
 import type { AVRack } from '../av/AVRack';
-import { usedRackUnits, defaultFloorRack, defaultWallRack } from '../av/AVRack';
+import { usedRackUnits, defaultFloorRack, defaultWallRack, RU_HEIGHT_M } from '../av/AVRack';
 import { snapSeatPosition } from '../interaction/SnapEngine';
 import type { AlignmentGuide } from '../interaction/CadSnap';
 import type { EquipmentInstance, PlacementMode } from '../catalog/EquipmentCatalog';
@@ -40,6 +40,8 @@ import { cableRouteContext } from '../system/cableContext';
 import { cableSchedule, type CableScheduleResult } from '../system/CableSchedule';
 import { generateBom, type BomReport } from '../docs/BomGenerator';
 import { generateEngineeringReport, type EngineeringReport } from '../docs/EngineeringReport';
+import { computeDesignHealth, type DesignHealthReport, type ClickToFixAction } from '../av/DesignHealth';
+import { validationReportFor } from '../av/validation/validationCache';
 import { equipmentWorldPosition } from '../av/RackTransform';
 import { defaultQuickRequirements, type AutoDesignMode, type DesignRequirements, type DesignUseCase } from '../autodesign/DesignRequirements';
 import { generateDesign, hasManualChanges, selectedOption } from '../autodesign/DesignPipeline';
@@ -313,6 +315,7 @@ export class AppState {
   findingFocusRequest = 0;
   validationDeltaMessage = '';
   detailsFindingId: string | null = null;
+  healthHudOpen = false;
 
   /** Auto Design session — not part of undo snapshots. */
   autoDesignOpen = false;
@@ -340,6 +343,7 @@ export class AppState {
   private listeners: Set<Listener> = new Set();
   private history = new HistoryManager();
   private historyPrepared = false;
+  private historySuspended = false;
 
   subscribe(fn: Listener): () => void {
     this.listeners.add(fn);
@@ -403,6 +407,7 @@ export class AppState {
   }
 
   private recordAndReset(): void {
+    if (this.historySuspended) return;
     if (!this.historyPrepared) this.history.push(this.captureSnapshot());
     this.historyPrepared = false;
   }
@@ -458,10 +463,18 @@ export class AppState {
     this.notify();
   }
 
-  addDefaultRack(kind: 'floor' | 'wall' = 'floor'): AVRack {
+  addDefaultRack(kind: 'floor' | 'wall' = 'floor', ruTotal?: number): AVRack {
     this.recordAndReset();
     const id = `av-rack-${this.racks.length + 1}`;
     const rack = kind === 'wall' ? defaultWallRack(id) : defaultFloorRack(id);
+    if (ruTotal) {
+      rack.ruTotal = ruTotal;
+      (rack as any).totalRU = ruTotal;
+      rack.height = ruTotal * RU_HEIGHT_M + 0.12;
+      rack.y = rack.height / 2;
+    } else {
+      (rack as any).totalRU = rack.ruTotal;
+    }
     if (this.room) {
       rack.x = Number((this.room.width / 2 - rack.width / 2 - 0.2).toFixed(2));
       rack.z = Number((this.room.depth / 2 - rack.depth / 2 - 0.2).toFixed(2));
@@ -1830,4 +1843,73 @@ export class AppState {
   getEngineeringReport(): EngineeringReport {
     return generateEngineeringReport(this, catalog);
   }
+
+  toggleHealthHud(): void {
+    this.healthHudOpen = !this.healthHudOpen;
+    this.notify();
+  }
+
+  setHealthHudOpen(open: boolean): void {
+    if (this.healthHudOpen !== open) {
+      this.healthHudOpen = open;
+      this.notify();
+    }
+  }
+
+  /**
+   * Authoritative deterministic design health assessment derived from active validation findings.
+   */
+  getDesignHealth(): DesignHealthReport {
+    const report = validationReportFor(this);
+    return computeDesignHealth(report, this.equipment, this.seats, catalog);
+  }
+
+  /**
+   * Executes a deterministic Click-to-Fix engineering remediation on AppState.
+   */
+  applyClickToFix(actionOrId: ClickToFixAction | string): boolean {
+    const health = this.getDesignHealth();
+    const action = typeof actionOrId === 'string'
+      ? health.actionableFixes.find((a) => a.id === actionOrId || a.findingId === actionOrId)
+      : actionOrId;
+    if (!action) return false;
+    this.recordAndReset();
+    this.historySuspended = true;
+    try {
+      if (typeof action.execute === 'function') {
+        const ok = action.execute(this);
+        if (ok) {
+          this.notify();
+        }
+        return ok;
+      }
+
+      const kind = action.actionKind || (action as any).kind;
+      if (kind === 'add_rack') {
+        const rackKind = (action as any).params?.rackKind ?? 'floor';
+        const totalRU = (action as any).params?.totalRU ?? 24;
+        const rack = this.addDefaultRack(rackKind, totalRU);
+        if ((action as any).targetEntityId) {
+          this.assignEquipmentToRack((action as any).targetEntityId, rack.id);
+        }
+        this.notify();
+        return true;
+      }
+
+      if (kind === 'assign_rack') {
+        const rackId = (action as any).params?.rackId;
+        const rack = rackId ? this.racks.find((r) => r.id === rackId) : (this.racks[0] || this.addDefaultRack('floor', 24));
+        if ((action as any).targetEntityId && rack) {
+          this.assignEquipmentToRack((action as any).targetEntityId, rack.id);
+        }
+        this.notify();
+        return true;
+      }
+
+      return false;
+    } finally {
+      this.historySuspended = false;
+    }
+  }
 }
+

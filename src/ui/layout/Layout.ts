@@ -11,6 +11,7 @@ import { renderSystemCanvas } from '../panels/SystemCanvas';
 import { renderAutoDesignOverlay } from '../panels/AutoDesignPanel';
 import { renderDesignAssistant } from '../panels/DesignAssistantPanel';
 import { renderProjectSetupOverlay } from '../panels/ProjectSetupOverlay';
+import { renderDesignHealthHUD } from '../panels/DesignHealthHUD';
 import { downloadProject, parseProjectJson, loadProjectInto } from '../../app/ProjectStore';
 import { validationReportFor } from '../../av/validation/validationCache';
 import { computeDesignHealth } from '../../av/DesignHealth';
@@ -344,7 +345,7 @@ export function buildLayout(root: HTMLElement, state: AppState): LayoutRefs {
         ? 'Configured checks are passing'
         : 'Open Validate for actionable design issues'
     );
-    healthChip.onclick = () => state.setShellNav('validate');
+    healthChip.onclick = () => state.toggleHealthHud();
 
     renderObjectBrowser(objectBrowserEl, state);
     renderDesignPanel(designPanelEl, state);
@@ -356,6 +357,7 @@ export function buildLayout(root: HTMLElement, state: AppState): LayoutRefs {
     renderAutoDesignOverlay(viewportStage, state);
     renderProjectSetupOverlay(viewportStage, state);
     renderDesignAssistant(viewportStage, state);
+    renderDesignHealthHUD(viewportStage, state);
 
     const system = state.workspaceMode === 'system' && !state.systemPhysicalView;
     viewportCanvas.style.display = !system && state.viewMode === '3d' ? '' : 'none';

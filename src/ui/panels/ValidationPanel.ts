@@ -119,6 +119,23 @@ export function renderValidationPanel(container: HTMLElement, state: AppState): 
 
         const actions = document.createElement('div');
         actions.className = 'finding-actions';
+
+        const fix = state.getDesignHealth().actionableFixes.find((a) => a.findingId === f.id);
+        if (fix) {
+          const fixBtn = document.createElement('button');
+          fixBtn.className = 'btn primary';
+          fixBtn.style.background = '#2563eb';
+          fixBtn.style.color = '#ffffff';
+          fixBtn.style.fontWeight = '600';
+          fixBtn.innerHTML = `⚡ ${escapeHtml(fix.label)}`;
+          fixBtn.title = fix.description;
+          fixBtn.onclick = (e) => {
+            e.stopPropagation();
+            state.applyClickToFix(fix);
+          };
+          actions.appendChild(fixBtn);
+        }
+
         const view = document.createElement('button');
         view.className = 'btn primary';
         view.textContent = 'Focus in 3D';

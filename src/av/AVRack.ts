@@ -13,6 +13,7 @@ export interface AVRack {
   kind: RackKind;
   /** Total rack units. Typical floor rack 42. */
   ruTotal: number;
+  totalRU?: number;
   width: number;
   depth: number;
   /** Overall cabinet height (m). */
