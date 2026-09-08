@@ -56,6 +56,7 @@ import {
 } from '../ui/workspace/projectSetup';
 import type { AIChatMessage } from '../ai/AIAgentTypes';
 import { AIAssistantService } from '../ai/ai-agent-service';
+import { computeVRWaypoints, type VREyeHeightPreset, type VRWaypoint } from '../engine/VRCompatibility';
 
 export const catalog = loadDefaultCatalog();
 
@@ -337,6 +338,10 @@ export class AppState {
     camera: false
   };
   presentationSavedPanels: { leftCollapsed: boolean; rightCollapsed: boolean } | null = null;
+  /** VR Walkthrough Mode (§21, §27, §28) — not part of undo snapshots. */
+  vrMode = false;
+  vrEyeHeight: VREyeHeightPreset = 'seated';
+  vrCurrentWaypointId: string | null = null;
 
   /** Auto Design session — not part of undo snapshots. */
   autoDesignOpen = false;
@@ -1960,6 +1965,7 @@ export class AppState {
   exitPresentationMode(): void {
     if (!this.presentationMode) return;
     this.presentationMode = false;
+    this.vrMode = false;
     if (this.presentationSavedPanels) {
       this.leftPanelCollapsed = this.presentationSavedPanels.leftCollapsed;
       this.rightPanelCollapsed = this.presentationSavedPanels.rightCollapsed;
@@ -2037,6 +2043,54 @@ export class AppState {
     if (this.assistantService) {
       this.assistantService.clearHistory();
     }
+    this.notify();
+  }
+
+  // ── VR Walkthrough Mode (§21, §27, §28) ─────────────────────
+
+  getVRWaypoints(): VRWaypoint[] {
+    return computeVRWaypoints(this);
+  }
+
+  enterVRWalkthrough(waypointId?: string): void {
+    if (!this.presentationMode) {
+      this.enterPresentationMode();
+    }
+    this.vrMode = true;
+    const waypoints = this.getVRWaypoints();
+    const target = waypointId
+      ? waypoints.find((w) => w.id === waypointId) ?? waypoints[0]
+      : waypoints[0];
+    if (target) {
+      this.vrCurrentWaypointId = target.id;
+      this.vrEyeHeight = target.preferredEyeHeight;
+    }
+    this.notify();
+  }
+
+  exitVRWalkthrough(): void {
+    if (!this.vrMode) return;
+    this.vrMode = false;
+    this.notify();
+  }
+
+  toggleVRWalkthrough(): void {
+    if (this.vrMode) this.exitVRWalkthrough();
+    else this.enterVRWalkthrough();
+  }
+
+  setVREyeHeight(preset: VREyeHeightPreset): void {
+    if (this.vrEyeHeight === preset) return;
+    this.vrEyeHeight = preset;
+    this.notify();
+  }
+
+  teleportToVRWaypoint(waypointId: string): void {
+    const waypoints = this.getVRWaypoints();
+    const wp = waypoints.find((w) => w.id === waypointId);
+    if (!wp) return;
+    this.vrCurrentWaypointId = wp.id;
+    this.vrEyeHeight = wp.preferredEyeHeight;
     this.notify();
   }
 }

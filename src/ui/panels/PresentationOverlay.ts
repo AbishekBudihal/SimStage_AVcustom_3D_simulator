@@ -92,6 +92,33 @@ export function renderPresentationOverlay(container: HTMLElement, state: AppStat
     <span class="label">Engineering Health</span>
   `;
 
+  // VR Walkthrough Toggle & Height Controls (§21, §27, §28)
+  const vrToggleBtn = document.createElement('button');
+  vrToggleBtn.type = 'button';
+  vrToggleBtn.className = `presentation-vr-btn ${state.vrMode ? 'active' : ''}`;
+  vrToggleBtn.innerHTML = `<span>🥽 ${state.vrMode ? 'Exit Walkthrough' : 'Walkthrough (VR)'}</span>`;
+  vrToggleBtn.onclick = () => state.toggleVRWalkthrough();
+
+  if (state.vrMode) {
+    const heightGroup = document.createElement('div');
+    heightGroup.className = 'presentation-vr-heights';
+
+    const seatedBtn = document.createElement('button');
+    seatedBtn.type = 'button';
+    seatedBtn.className = `presentation-vr-height-btn ${state.vrEyeHeight === 'seated' ? 'active' : ''}`;
+    seatedBtn.textContent = '🪑 Seated 1.15m';
+    seatedBtn.onclick = () => state.setVREyeHeight('seated');
+
+    const standingBtn = document.createElement('button');
+    standingBtn.type = 'button';
+    standingBtn.className = `presentation-vr-height-btn ${state.vrEyeHeight === 'standing' ? 'active' : ''}`;
+    standingBtn.textContent = '🧍 Standing 1.65m';
+    standingBtn.onclick = () => state.setVREyeHeight('standing');
+
+    heightGroup.append(seatedBtn, standingBtn);
+    rightActions.append(heightGroup);
+  }
+
   const exitBtn = document.createElement('button');
   exitBtn.type = 'button';
   exitBtn.className = 'presentation-exit-btn';
@@ -99,49 +126,77 @@ export function renderPresentationOverlay(container: HTMLElement, state: AppStat
   exitBtn.innerHTML = `<span>Exit</span> <kbd>Esc</kbd>`;
   exitBtn.onclick = () => state.exitPresentationMode();
 
-  rightActions.append(healthPill, exitBtn);
+  rightActions.append(vrToggleBtn, healthPill, exitBtn);
   header.append(leftBranding, rightActions);
 
-  // 2. Guided Camera Tour Bar (Bottom Center)
+  // 2. Guided Camera Tour / VR Walkthrough Bar (Bottom Center)
   const tourBar = document.createElement('div');
   tourBar.className = 'presentation-tour-bar';
 
-  const tourHeader = document.createElement('div');
-  tourHeader.className = 'presentation-tour-header';
-  const currentStopInfo = TOUR_STOPS.find((s) => s.id === state.presentationStop) ?? TOUR_STOPS[0];
-  tourHeader.innerHTML = `<span class="tour-stop-tag">CAMERA PERSPECTIVE</span> <span class="tour-desc">${currentStopInfo.desc}</span>`;
+  if (state.vrMode) {
+    const waypoints = state.getVRWaypoints();
+    const currentWp = waypoints.find((w) => w.id === state.vrCurrentWaypointId) ?? waypoints[0];
 
-  const tourControls = document.createElement('div');
-  tourControls.className = 'presentation-tour-controls';
+    const vrHeader = document.createElement('div');
+    vrHeader.className = 'presentation-tour-header';
+    vrHeader.innerHTML = `<span class="tour-stop-tag" style="background:#9333ea;">🥽 VR WAYPOINT</span> <span class="tour-desc">${currentWp ? currentWp.description : 'Explore room from calibrated eye heights'}</span>`;
 
-  const prevBtn = document.createElement('button');
-  prevBtn.type = 'button';
-  prevBtn.className = 'presentation-step-btn';
-  prevBtn.textContent = '◀';
-  prevBtn.title = 'Previous Camera View';
-  prevBtn.onclick = () => state.stepPresentationStop(-1);
+    const vrControls = document.createElement('div');
+    vrControls.className = 'presentation-tour-controls';
 
-  tourControls.appendChild(prevBtn);
+    waypoints.forEach((wp) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      const isActive = state.vrCurrentWaypointId === wp.id;
+      btn.className = `presentation-tour-btn ${isActive ? 'active' : ''}`;
+      if (isActive) {
+        btn.style.background = '#9333ea';
+        btn.style.borderColor = '#c084fc';
+      }
+      btn.innerHTML = `<span>${wp.label}</span>`;
+      btn.onclick = () => state.teleportToVRWaypoint(wp.id);
+      vrControls.appendChild(btn);
+    });
 
-  TOUR_STOPS.forEach((stop) => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = `presentation-tour-btn ${state.presentationStop === stop.id ? 'active' : ''}`;
-    btn.innerHTML = `<span class="btn-icon">${stop.icon}</span> <span>${stop.label}</span>`;
-    btn.onclick = () => state.setPresentationStop(stop.id);
-    tourControls.appendChild(btn);
-  });
+    tourBar.append(vrHeader, vrControls);
+  } else {
+    const tourHeader = document.createElement('div');
+    tourHeader.className = 'presentation-tour-header';
+    const currentStopInfo = TOUR_STOPS.find((s) => s.id === state.presentationStop) ?? TOUR_STOPS[0];
+    tourHeader.innerHTML = `<span class="tour-stop-tag">CAMERA PERSPECTIVE</span> <span class="tour-desc">${currentStopInfo.desc}</span>`;
 
-  const nextBtn = document.createElement('button');
-  nextBtn.type = 'button';
-  nextBtn.className = 'presentation-step-btn';
-  nextBtn.textContent = '▶';
-  nextBtn.title = 'Next Camera View';
-  nextBtn.onclick = () => state.stepPresentationStop(1);
+    const tourControls = document.createElement('div');
+    tourControls.className = 'presentation-tour-controls';
 
-  tourControls.appendChild(nextBtn);
+    const prevBtn = document.createElement('button');
+    prevBtn.type = 'button';
+    prevBtn.className = 'presentation-step-btn';
+    prevBtn.textContent = '◀';
+    prevBtn.title = 'Previous Camera View';
+    prevBtn.onclick = () => state.stepPresentationStop(-1);
 
-  tourBar.append(tourHeader, tourControls);
+    tourControls.appendChild(prevBtn);
+
+    TOUR_STOPS.forEach((stop) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `presentation-tour-btn ${state.presentationStop === stop.id ? 'active' : ''}`;
+      btn.innerHTML = `<span class="btn-icon">${stop.icon}</span> <span>${stop.label}</span>`;
+      btn.onclick = () => state.setPresentationStop(stop.id);
+      tourControls.appendChild(btn);
+    });
+
+    const nextBtn = document.createElement('button');
+    nextBtn.type = 'button';
+    nextBtn.className = 'presentation-step-btn';
+    nextBtn.textContent = '▶';
+    nextBtn.title = 'Next Camera View';
+    nextBtn.onclick = () => state.stepPresentationStop(1);
+
+    tourControls.appendChild(nextBtn);
+
+    tourBar.append(tourHeader, tourControls);
+  }
 
   // 3. Client Capability Overlays (Floating Side Bar)
   const overlayPanel = document.createElement('div');
