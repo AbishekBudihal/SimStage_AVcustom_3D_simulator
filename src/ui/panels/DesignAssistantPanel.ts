@@ -76,10 +76,147 @@ export function renderDesignAssistant(host: HTMLElement, state: AppState): void 
   head.append(title, close);
   el.appendChild(head);
 
+  // ── Tab switcher ──────────────────────────────────────────
+  const tabsContainer = document.createElement('div');
+  tabsContainer.className = 'ad-assistant-tabs';
+
+  const copilotTabBtn = document.createElement('button');
+  copilotTabBtn.type = 'button';
+  copilotTabBtn.className = `ad-tab-btn ${state.assistantTab === 'copilot' ? 'active' : ''}`;
+  copilotTabBtn.textContent = '✦ Copilot';
+  copilotTabBtn.onclick = () => state.setAssistantTab('copilot');
+
+  const checklistTabBtn = document.createElement('button');
+  checklistTabBtn.type = 'button';
+  checklistTabBtn.className = `ad-tab-btn ${state.assistantTab === 'checklist' ? 'active' : ''}`;
+  checklistTabBtn.textContent = attention > 0 ? `📋 Checklist (${attention})` : '📋 Checklist';
+  checklistTabBtn.onclick = () => state.setAssistantTab('checklist');
+
+  tabsContainer.append(copilotTabBtn, checklistTabBtn);
+  el.appendChild(tabsContainer);
+
+  // ── Copilot Tab Content ───────────────────────────────────
+  if (state.assistantTab === 'copilot') {
+    const copilotBody = document.createElement('div');
+    copilotBody.className = 'ad-copilot-body';
+
+    // Quick action prompt chips
+    const chipsContainer = document.createElement('div');
+    chipsContainer.className = 'ad-prompt-chips';
+
+    const quickPrompts = [
+      { label: '⚡ Auto-Fix', cmd: 'auto fix issues' },
+      { label: '📋 BOM', cmd: 'recommend bom' },
+      { label: '🎯 Center Display', cmd: 'center display' },
+      { label: '🔍 Audit', cmd: 'audit design' },
+      { label: '📦 Equipment', cmd: 'list equipment' }
+    ];
+
+    quickPrompts.forEach(({ label, cmd }) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'ad-prompt-chip';
+      chip.textContent = label;
+      chip.disabled = state.copilotTyping;
+      chip.onclick = () => state.sendCopilotMessage(cmd);
+      chipsContainer.appendChild(chip);
+    });
+    copilotBody.appendChild(chipsContainer);
+
+    // Chat Message Feed
+    const feed = document.createElement('div');
+    feed.className = 'ad-chat-feed';
+
+    if (!state.copilotMessages.length) {
+      const emptyNotice = document.createElement('div');
+      emptyNotice.className = 'ad-chat-empty';
+      emptyNotice.innerHTML = `
+        <div style="font-weight:600;margin-bottom:4px;color:var(--text-primary);">SimStage AV Copilot</div>
+        <div style="margin-bottom:6px;">I can audit system flow, recommend BOM equipment, optimize layout, and resolve engineering warnings automatically.</div>
+        <div class="muted">Click a quick action above or type an instruction below.</div>
+      `;
+      feed.appendChild(emptyNotice);
+    } else {
+      state.copilotMessages.forEach((msg) => {
+        const bubble = document.createElement('div');
+        bubble.className = `ad-chat-bubble ${msg.role === 'user' ? 'user' : 'assistant'}`;
+
+        const roleLabel = document.createElement('div');
+        roleLabel.className = 'ad-bubble-role';
+        roleLabel.textContent = msg.role === 'user' ? 'You' : '✦ Copilot';
+        bubble.appendChild(roleLabel);
+
+        const content = document.createElement('div');
+        content.className = 'ad-bubble-content';
+        content.textContent = msg.content;
+        bubble.appendChild(content);
+
+        feed.appendChild(bubble);
+      });
+    }
+
+    if (state.copilotTyping) {
+      const typing = document.createElement('div');
+      typing.className = 'ad-chat-bubble assistant ad-typing-bubble';
+      typing.innerHTML = '<span class="ad-typing-indicator">Copilot is working...</span>';
+      feed.appendChild(typing);
+    }
+
+    copilotBody.appendChild(feed);
+
+    // Auto scroll feed to bottom
+    setTimeout(() => {
+      feed.scrollTop = feed.scrollHeight;
+    }, 10);
+
+    // Input Row
+    const inputRow = document.createElement('form');
+    inputRow.className = 'ad-chat-input-row';
+    inputRow.onsubmit = (e) => {
+      e.preventDefault();
+      const val = input.value.trim();
+      if (val && !state.copilotTyping) {
+        input.value = '';
+        state.sendCopilotMessage(val);
+      }
+    };
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'ad-chat-input';
+    input.placeholder = 'Ask copilot or type an action...';
+    input.disabled = state.copilotTyping;
+
+    const sendBtn = document.createElement('button');
+    sendBtn.type = 'submit';
+    sendBtn.className = 'ad-chat-send-btn';
+    sendBtn.textContent = '➤';
+    sendBtn.disabled = state.copilotTyping;
+
+    inputRow.append(input, sendBtn);
+    copilotBody.appendChild(inputRow);
+
+    if (state.copilotMessages.length > 0) {
+      const clearBtn = document.createElement('button');
+      clearBtn.type = 'button';
+      clearBtn.className = 'ad-chat-clear-btn';
+      clearBtn.textContent = 'Clear chat history';
+      clearBtn.onclick = () => state.clearCopilotHistory();
+      copilotBody.appendChild(clearBtn);
+    }
+
+    el.appendChild(copilotBody);
+    return;
+  }
+
+  // ── Checklist Tab Content ─────────────────────────────────
+  const checklistBody = document.createElement('div');
+  checklistBody.className = 'ad-checklist-body';
+
   const healthTitle = document.createElement('div');
   healthTitle.className = 'nav-section-title';
   healthTitle.textContent = 'DESIGN HEALTH';
-  el.appendChild(healthTitle);
+  checklistBody.appendChild(healthTitle);
   const display = getActiveDisplay(state.equipment, catalog);
   const obstacles = projectObstacles(state.room, state.tables, state.racks);
   const viewing = summarizeDesignHealth(state.seats, display, obstacles);
@@ -98,7 +235,7 @@ export function renderDesignAssistant(host: HTMLElement, state: AppState): void 
       if (inst) state.analyzeEquipment(inst.instanceId);
     }
   };
-  el.appendChild(viewRow);
+  checklistBody.appendChild(viewRow);
 
   const cam = summarizeCameraCoverage(state.seats, state.equipment, catalog, state.room, state.tables);
   if (state.equipment.some((e) => catalog.get(e.productId)?.category === 'camera')) {
@@ -112,7 +249,7 @@ export function renderDesignAssistant(host: HTMLElement, state: AppState): void 
       if (inst) state.analyzeEquipment(inst.instanceId);
       else state.setWorkspaceMode('simulate');
     };
-    el.appendChild(camRow);
+    checklistBody.appendChild(camRow);
   }
 
   const speakers = usableSpeakerPlacements(resolveProjectSpeakers(state.equipment, catalog));
@@ -130,7 +267,7 @@ export function renderDesignAssistant(host: HTMLElement, state: AppState): void 
       const inst = state.equipment.find((e) => catalog.get(e.productId)?.category === 'speaker');
       if (inst) state.analyzeEquipment(inst.instanceId);
     };
-    el.appendChild(audioRow);
+    checklistBody.appendChild(audioRow);
   }
 
   const rackIssue = report.findings.find((f) => f.code.startsWith('RACK-') && f.severity !== 'pass');
@@ -144,7 +281,7 @@ export function renderDesignAssistant(host: HTMLElement, state: AppState): void 
       state.setWorkspaceMode('validate');
       if (state.racks[0]) state.select('rack', state.racks[0].id);
     };
-    el.appendChild(rackRow);
+    checklistBody.appendChild(rackRow);
   }
 
   const sysItems = systemCompletenessFromFindings(report.findings, state.equipment, catalog);
@@ -152,7 +289,7 @@ export function renderDesignAssistant(host: HTMLElement, state: AppState): void 
     const sysTitle = document.createElement('div');
     sysTitle.className = 'nav-section-title';
     sysTitle.textContent = 'SYSTEM COMPLETENESS';
-    el.appendChild(sysTitle);
+    checklistBody.appendChild(sysTitle);
     sysItems.forEach((item) => {
       const row = document.createElement('button');
       row.type = 'button';
@@ -161,14 +298,14 @@ export function renderDesignAssistant(host: HTMLElement, state: AppState): void 
       const mark = item.mark === 'ok' ? '✓' : item.mark === 'err' ? '✕' : item.mark === 'warn' ? '⚠' : '○';
       row.textContent = `${mark} ${item.label}`;
       row.onclick = () => state.setWorkspaceMode('system');
-      el.appendChild(row);
+      checklistBody.appendChild(row);
     });
   }
 
   const attn = document.createElement('div');
   attn.className = 'badge-note';
   attn.textContent = `${attention} issue${attention === 1 ? '' : 's'} require attention`;
-  el.appendChild(attn);
+  checklistBody.appendChild(attn);
 
   const rows: Array<[string, boolean | 'warn' | 'err', () => void]> = [
     ['Room', inv.room, () => state.setShellNav('project')],
@@ -204,7 +341,7 @@ export function renderDesignAssistant(host: HTMLElement, state: AppState): void 
     const mark = ok === true ? '✓' : ok === 'err' ? '✕' : '⚠';
     row.textContent = `${mark} ${label}`;
     row.onclick = go;
-    el!.appendChild(row);
+    checklistBody.appendChild(row);
   });
 
   if (state.uiComplexity === 'pro') {
@@ -229,7 +366,7 @@ export function renderDesignAssistant(host: HTMLElement, state: AppState): void 
         const m = document.createElement('div');
         m.textContent = r.message;
         box.append(t, m);
-        el!.appendChild(box);
+        checklistBody.appendChild(box);
       });
   }
 
@@ -238,6 +375,8 @@ export function renderDesignAssistant(host: HTMLElement, state: AppState): void 
     const n = document.createElement('div');
     n.className = 'badge-note';
     n.textContent = '⚠ Camera: ' + opt.picks.camera.completenessReason;
-    el.appendChild(n);
+    checklistBody.appendChild(n);
   }
+
+  el.appendChild(checklistBody);
 }

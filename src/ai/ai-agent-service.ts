@@ -13,6 +13,9 @@ import type { EquipmentCatalog } from '../catalog/EquipmentCatalog';
 import { loadDefaultCatalog } from '../catalog/loadCatalog';
 import { enumerateSignalPaths } from '../system/SignalPathEngine';
 import { evaluateRackRequirement } from '../av/RackRequirement';
+import { validationReportFor } from '../av/validation/validationCache';
+import { computeDesignHealth, generateClickToFix } from '../av/DesignHealth';
+import { inventory } from '../autodesign/DesignPipeline';
 import type {
   AIChatMessage,
   AIToolDefinition,
@@ -50,6 +53,21 @@ export const AV_TOOL_DEFINITIONS: AIToolDefinition[] = [
   {
     name: 'audit_design',
     description: 'Audit the current AV design for signal flow completeness, rack requirements, and engineering issues.',
+    parameters: {}
+  },
+  {
+    name: 'auto_solve_findings',
+    description: 'Automatically solve actionable engineering warnings and errors using deterministic click-to-fix rules.',
+    parameters: {}
+  },
+  {
+    name: 'recommend_bom',
+    description: 'Analyze room and requirements to recommend missing equipment and Bill of Materials upgrades.',
+    parameters: {}
+  },
+  {
+    name: 'optimize_layout',
+    description: 'Optimize spatial positioning of equipment such as centering front display or spacing mics.',
     parameters: {}
   },
   {
@@ -163,6 +181,141 @@ export function executeToolCall(
       return { success: true, message: lines.join('\n') };
     }
 
+    case 'auto_solve_findings': {
+      const report = validationReportFor(state);
+      const actionables = report.findings
+        .filter((f) => f.severity === 'error' || f.severity === 'warning')
+        .map((f) => generateClickToFix(f, catalog))
+        .filter((act): act is NonNullable<typeof act> => Boolean(act));
+
+      if (!actionables.length) {
+        return { success: true, message: 'No active actionable findings to solve. System health is clean!' };
+      }
+
+      let solvedCount = 0;
+      const solvedLabels: string[] = [];
+      for (const act of actionables) {
+        const ok = state.applyClickToFix(act);
+        if (ok) {
+          solvedCount++;
+          solvedLabels.push(act.label);
+        }
+      }
+
+      const updatedReport = validationReportFor(state);
+      const updatedHealth = computeDesignHealth(updatedReport, state.equipment, state.seats, catalog);
+
+      return {
+        success: solvedCount > 0,
+        message: solvedCount > 0
+          ? `⚡ Resolved ${solvedCount} issue(s):\n• ${solvedLabels.join('\n• ')}\n\nCurrent Health Score: ${updatedHealth.score}/100.`
+          : 'Could not automatically resolve remaining findings.',
+        suggestedFollowUp: ['Audit design', 'List equipment']
+      };
+    }
+
+    case 'recommend_bom': {
+      const inv = inventory(
+        {
+          room: state.room,
+          seats: state.seats,
+          tables: state.tables,
+          equipment: state.equipment,
+          connections: state.connections,
+          routes: state.routes
+        },
+        catalog
+      );
+
+      const recommendations: string[] = [];
+      if (!inv.display) {
+        recommendations.push('• Primary Display: Add commercial 75"–86" 4K display on front wall');
+      }
+      if (!inv.camera) {
+        recommendations.push('• Camera: Add optical 4K auto-framing conference camera at front wall');
+      }
+      if (!inv.microphones) {
+        recommendations.push('• Microphones: Add beamforming ceiling array or tabletop boundary mics');
+      }
+      if (!inv.audio) {
+        recommendations.push('• Audio: Add distributed ceiling speakers or front soundbar for even coverage');
+      }
+
+      const rackReq = evaluateRackRequirement(state.equipment, catalog);
+      if (rackReq.required && !state.racks.length) {
+        recommendations.push(`• Equipment Rack: Add ${rackReq.totalRU} RU rack enclosure for ${rackReq.devices.length} rack device(s)`);
+      }
+
+      if (!recommendations.length) {
+        return {
+          success: true,
+          message: '✓ Bill of Materials is complete for standard conferencing and presentation requirements!',
+          suggestedFollowUp: ['Audit design', 'Connect devices']
+        };
+      }
+
+      return {
+        success: true,
+        message: `📋 Recommended BOM Additions:\n${recommendations.join('\n')}`,
+        suggestedFollowUp: ['Add display', 'Add camera', 'Add microphone', 'Add rack']
+      };
+    }
+
+    case 'optimize_layout': {
+      const display = state.equipment.find((e) => {
+        const prod = catalog.get(e.productId);
+        return prod?.category === 'display' || (e.name && e.name.toLowerCase().includes('display'));
+      });
+      const room = state.room ?? { width: 8, depth: 6, height: 3 };
+
+      let optimized = false;
+      const changes: string[] = [];
+
+      // Center display on presentation wall
+      if (display) {
+        const wall = display.wall ?? 'front';
+        let targetX = 0;
+        let targetZ = display.position.z;
+        let targetRot = display.rotationY;
+
+        if (wall === 'front') {
+          targetX = 0;
+          targetZ = -room.depth / 2 + 0.08;
+          targetRot = 0;
+        } else if (wall === 'back') {
+          targetX = 0;
+          targetZ = room.depth / 2 - 0.08;
+          targetRot = Math.PI;
+        } else if (wall === 'left') {
+          targetX = -room.width / 2 + 0.08;
+          targetZ = 0;
+          targetRot = Math.PI / 2;
+        } else if (wall === 'right') {
+          targetX = room.width / 2 - 0.08;
+          targetZ = 0;
+          targetRot = -Math.PI / 2;
+        }
+
+        state.updateEquipment(display.instanceId, {
+          position: { x: targetX, y: Math.max(1.4, Math.min(1.8, display.position.y)), z: targetZ },
+          rotationY: targetRot
+        });
+        optimized = true;
+        const displayName = display.name || 'Display';
+        changes.push(`Centered ${displayName} on ${wall} wall at ergonomic presentation height.`);
+      }
+
+      if (optimized) {
+        return {
+          success: true,
+          message: `🎯 Layout Optimized:\n• ${changes.join('\n• ')}`,
+          suggestedFollowUp: ['Audit design', 'Check sightlines']
+        };
+      }
+
+      return { success: true, message: 'Layout is already well aligned to room axes.' };
+    }
+
     case 'list_equipment': {
       if (!state.equipment.length) return { success: true, message: 'No equipment in the design.' };
       const lines = state.equipment.map((e) => {
@@ -242,6 +395,36 @@ export function parseOfflineIntent(userMessage: string): AIToolCall | null {
     return {
       id: `intent-${Date.now()}`,
       name: 'audit_design',
+      arguments: {},
+      status: 'pending'
+    };
+  }
+
+  // "fix" / "auto fix" / "solve" / "resolve"
+  if (/fix|solve|resolve\s+(?:all|issues|findings|warnings)|click\s+to\s+fix/.test(msg)) {
+    return {
+      id: `intent-${Date.now()}`,
+      name: 'auto_solve_findings',
+      arguments: {},
+      status: 'pending'
+    };
+  }
+
+  // "recommend" / "bom" / "what am i missing" / "suggest equipment"
+  if (/recommend|suggest|what(?:\s+am\s+i|\s+is)?\s+missing|bom|bill\s+of\s+materials/.test(msg)) {
+    return {
+      id: `intent-${Date.now()}`,
+      name: 'recommend_bom',
+      arguments: {},
+      status: 'pending'
+    };
+  }
+
+  // "optimize" / "center display" / "align layout"
+  if (/optimize|center\s+display|align\s+layout|clean\s+layout/.test(msg)) {
+    return {
+      id: `intent-${Date.now()}`,
+      name: 'optimize_layout',
       arguments: {},
       status: 'pending'
     };
@@ -356,7 +539,7 @@ export class AIAssistantService {
     // No recognized intent
     const fallback: AIChatMessage = {
       role: 'assistant',
-      content: `I can help with AV design tasks. Try:\n• "Add display on front wall"\n• "Connect switcher to display"\n• "Audit design"\n• "List equipment"`,
+      content: `I can help with AV design tasks. Try:\n• "Auto fix issues"\n• "Recommend BOM"\n• "Optimize layout"\n• "Add display on front wall"\n• "Connect switcher to display"\n• "Audit design"\n• "List equipment"`,
       timestamp: Date.now()
     };
     this.history.push(fallback);

@@ -54,6 +54,8 @@ import {
   type ShellNav,
   type UiComplexity
 } from '../ui/workspace/projectSetup';
+import type { AIChatMessage } from '../ai/AIAgentTypes';
+import { AIAssistantService } from '../ai/ai-agent-service';
 
 export const catalog = loadDefaultCatalog();
 
@@ -348,6 +350,9 @@ export class AppState {
   dismissedRecommendationIds: string[] = [];
   assistantCollapsed = true;
   assistantDrawerOpen = false;
+  assistantTab: 'copilot' | 'checklist' = 'copilot';
+  copilotMessages: AIChatMessage[] = [];
+  copilotTyping = false;
   leftPanelCollapsed = false;
   rightPanelCollapsed = false;
   viewportTool: ViewportTool = 'select';
@@ -1986,6 +1991,52 @@ export class AppState {
       ...this.presentationOverlays,
       [layer]: !this.presentationOverlays[layer]
     };
+    this.notify();
+  }
+
+  // ── AI Copilot Assistant (§26, §28) ─────────────────────────
+
+  private assistantService: AIAssistantService | null = null;
+
+  getAssistantService(): AIAssistantService {
+    if (!this.assistantService) {
+      this.assistantService = new AIAssistantService(this);
+    }
+    return this.assistantService;
+  }
+
+  setAssistantTab(tab: 'copilot' | 'checklist'): void {
+    if (this.assistantTab === tab) return;
+    this.assistantTab = tab;
+    this.notify();
+  }
+
+  async sendCopilotMessage(text: string): Promise<void> {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    const service = this.getAssistantService();
+    this.copilotTyping = true;
+    this.copilotMessages = [
+      ...this.copilotMessages,
+      { role: 'user', content: trimmed, timestamp: Date.now() }
+    ];
+    this.notify();
+
+    try {
+      await service.processMessage(trimmed);
+      this.copilotMessages = [...service.getHistory()];
+    } finally {
+      this.copilotTyping = false;
+      this.notify();
+    }
+  }
+
+  clearCopilotHistory(): void {
+    this.copilotMessages = [];
+    if (this.assistantService) {
+      this.assistantService.clearHistory();
+    }
     this.notify();
   }
 }
