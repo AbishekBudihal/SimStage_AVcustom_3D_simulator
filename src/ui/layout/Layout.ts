@@ -12,6 +12,7 @@ import { renderAutoDesignOverlay } from '../panels/AutoDesignPanel';
 import { renderDesignAssistant } from '../panels/DesignAssistantPanel';
 import { renderProjectSetupOverlay } from '../panels/ProjectSetupOverlay';
 import { renderDesignHealthHUD } from '../panels/DesignHealthHUD';
+import { renderPresentationOverlay } from '../panels/PresentationOverlay';
 import { downloadProject, parseProjectJson, loadProjectInto } from '../../app/ProjectStore';
 import { validationReportFor } from '../../av/validation/validationCache';
 import { computeDesignHealth } from '../../av/DesignHealth';
@@ -91,9 +92,14 @@ export function buildLayout(root: HTMLElement, state: AppState): LayoutRefs {
   autoBtn.textContent = 'Auto Design';
   autoBtn.className = 'topbar-auto';
   autoBtn.onclick = () => state.requestAutoDesign();
+  const presentBtn = document.createElement('button');
+  presentBtn.textContent = 'Present';
+  presentBtn.className = 'topbar-present';
+  presentBtn.title = 'Client Presentation Mode (P)';
+  presentBtn.onclick = () => state.togglePresentationMode();
   const healthChip = document.createElement('span');
   healthChip.className = 'health-chip';
-  topbar.append(brand, modeSwitch, projectName, complexity, healthChip, autoBtn, newBtn, openBtn, exportBtn);
+  topbar.append(brand, modeSwitch, projectName, complexity, healthChip, presentBtn, autoBtn, newBtn, openBtn, exportBtn);
 
   const mainLayout = document.createElement('div');
   mainLayout.className = 'main-layout';
@@ -347,6 +353,9 @@ export function buildLayout(root: HTMLElement, state: AppState): LayoutRefs {
     );
     healthChip.onclick = () => state.toggleHealthHud();
 
+    root.classList.toggle('presentation-active', state.presentationMode);
+    presentBtn.classList.toggle('active', state.presentationMode);
+
     renderObjectBrowser(objectBrowserEl, state);
     renderDesignPanel(designPanelEl, state);
     renderInspectorPanel(inspectorHost, state);
@@ -358,6 +367,7 @@ export function buildLayout(root: HTMLElement, state: AppState): LayoutRefs {
     renderProjectSetupOverlay(viewportStage, state);
     renderDesignAssistant(viewportStage, state);
     renderDesignHealthHUD(viewportStage, state);
+    renderPresentationOverlay(viewportStage, state);
 
     const system = state.workspaceMode === 'system' && !state.systemPhysicalView;
     viewportCanvas.style.display = !system && state.viewMode === '3d' ? '' : 'none';
@@ -398,12 +408,14 @@ export function buildLayout(root: HTMLElement, state: AppState): LayoutRefs {
     else if (e.key === '2') state.setViewMode('plan');
     else if (e.key === '3') state.setViewMode('elevation');
     else if (e.key === 'f' || e.key === 'F') state.requestFocus();
+    else if (e.key === 'p' || e.key === 'P') state.togglePresentationMode();
     else if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
       state.deleteSelected();
     } else if (e.key === 'Escape') {
-      if (state.viewportTool === 'measure' || state.measurePoints.length) state.clearMeasure();
-      if (state.setupOpen) state.closeSetup();
+      if (state.presentationMode) state.exitPresentationMode();
+      else if (state.viewportTool === 'measure' || state.measurePoints.length) state.clearMeasure();
+      else if (state.setupOpen) state.closeSetup();
       else if (state.viewerMode.active) state.exitViewerMode();
       else state.select('none', null);
     }

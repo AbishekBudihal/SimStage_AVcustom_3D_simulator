@@ -852,3 +852,332 @@ button:focus-visible, input:focus-visible, select:focus-visible, .nav-item:focus
   border-radius: 6px;
 }
 
+/* ── Topbar Present Button ── */
+.topbar-present {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%);
+  color: #ffffff !important;
+  font-weight: 600;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.topbar-present:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.4);
+}
+.topbar-present.active {
+  background: #1e293b;
+  border-color: #3b82f6;
+  color: #60a5fa !important;
+}
+
+/* ── Presentation Mode Decluttering ── */
+.presentation-active .panel-left,
+.presentation-active .panel-right,
+.presentation-active .viewport-chrome,
+.presentation-active .view-bar,
+.presentation-active .status-bar,
+.presentation-active .finding-hud,
+.presentation-active .analysis-legend-hud,
+.presentation-active .design-health-hud {
+  display: none !important;
+}
+
+.presentation-active .viewport-stage {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+}
+
+/* ── Presentation Overlay HUD ── */
+.presentation-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 18px 24px;
+}
+
+/* Header */
+.presentation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  pointer-events: auto;
+  background: rgba(15, 23, 42, 0.78);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 14px 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  max-width: 100%;
+}
+
+.presentation-branding {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.presentation-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.presentation-live-badge {
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  padding: 3px 7px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.presentation-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: -0.2px;
+}
+
+.presentation-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #94a3b8;
+}
+
+.presentation-meta-row .meta-dot {
+  color: #64748b;
+}
+
+.presentation-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.presentation-health-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.presentation-health-pill.excellent .score { color: #4ade80; }
+.presentation-health-pill.good .score { color: #facc15; }
+.presentation-health-pill.warning .score { color: #f87171; }
+.presentation-health-pill .score {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.presentation-health-pill .label {
+  font-size: 9px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.presentation-exit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fca5a5 !important;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.presentation-exit-btn:hover {
+  background: rgba(239, 68, 68, 0.3);
+  color: #ffffff !important;
+}
+.presentation-exit-btn kbd {
+  font-size: 9px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* Guided Tour Controls (Bottom Center) */
+.presentation-tour-bar {
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 30px;
+  padding: 8px 16px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+}
+
+.presentation-tour-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+.presentation-tour-header .tour-stop-tag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.15);
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+.presentation-tour-header .tour-desc {
+  color: #cbd5e1;
+}
+
+.presentation-tour-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.presentation-step-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8 !important;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.presentation-step-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff !important;
+}
+
+.presentation-tour-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1 !important;
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.presentation-tour-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff !important;
+}
+.presentation-tour-btn.active {
+  background: #2563eb;
+  border-color: #3b82f6;
+  color: #ffffff !important;
+  font-weight: 600;
+  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.45);
+}
+
+/* AV Capability Overlays (Floating Side Bar) */
+.presentation-capability-panel {
+  position: absolute;
+  right: 24px;
+  top: 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: auto;
+  background: rgba(15, 23, 42, 0.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  max-width: 250px;
+}
+
+.presentation-capability-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #94a3b8;
+  margin-bottom: 2px;
+}
+
+.presentation-capability-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.presentation-capability-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 6px 10px;
+  color: #94a3b8 !important;
+  font-size: 11px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+.presentation-capability-chip:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f1f5f9 !important;
+}
+.presentation-capability-chip.active {
+  background: rgba(59, 130, 246, 0.18);
+  border-color: rgba(59, 130, 246, 0.45);
+  color: #93c5fd !important;
+}
+.presentation-capability-chip .chip-label {
+  flex: 1;
+  font-weight: 500;
+}
+.presentation-capability-chip .chip-status {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.25);
+}
+.presentation-capability-chip.active .chip-status {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+

@@ -91,6 +91,7 @@ export class SceneManager {
   private lastAnalysisSignature = '';
   private lastVizBuildSignature = '';
   private lastCableSignature = '';
+  private lastPresentationSignature = '';
   private dragging = false;
 
   private raycaster = new THREE.Raycaster();
@@ -301,8 +302,11 @@ export class SceneManager {
     }
 
     this.syncViewerMode();
+    this.syncPresentationMode();
     this.updateTransformVisibility();
     const vizBuildSig =
+      this.state.presentationMode +
+      JSON.stringify(this.state.presentationOverlays) +
       JSON.stringify(this.state.displayAnalysis) +
       JSON.stringify(this.state.micAnalysis) +
       JSON.stringify(this.state.audioAnalysis) +
@@ -358,10 +362,11 @@ export class SceneManager {
     const cameraViz = this.state.cameraAnalysis;
     const display = this.activeDisplay();
     const room = this.state.room;
-    const needDisplay = viz.enabled && !!display && !!room;
-    const needMic = micViz.enabled && !!room;
-    const needAudio = audioViz.enabled && !!room;
-    const needCamera = cameraViz.enabled && !!room;
+    const isPres = this.state.presentationMode;
+    const needDisplay = (viz.enabled || (isPres && this.state.presentationOverlays.sightlines)) && !!display && !!room;
+    const needMic = (micViz.enabled || (isPres && this.state.presentationOverlays.mic)) && !!room;
+    const needAudio = (audioViz.enabled || (isPres && this.state.presentationOverlays.audio)) && !!room;
+    const needCamera = (cameraViz.enabled || (isPres && this.state.presentationOverlays.camera)) && !!room;
     if (!needDisplay && !needMic && !needAudio && !needCamera) {
       this.clearAnalysisGroup();
       return;
@@ -408,7 +413,7 @@ export class SceneManager {
       addFieldContours(grid, viz.contours);
     }
 
-    if (needCamera && cameraViz.fovRegions && room) {
+    if (needCamera && (cameraViz.fovRegions || isPres) && room) {
       resolveProjectCameras(this.state.equipment, catalog).forEach((cam) => {
         if (!cam.coverageRegion) return;
         const selected = this.state.selection.kind === 'equipment' && this.state.selection.id === cam.instanceId;
@@ -452,7 +457,7 @@ export class SceneManager {
         });
     }
 
-    if (needAudio && audioViz.coverageRegions && room) {
+    if (needAudio && (audioViz.coverageRegions || isPres) && room) {
       resolveProjectSpeakers(this.state.equipment, catalog).forEach((sp) => {
         if (sp.incomplete) return;
         const selected = this.state.selection.kind === 'equipment' && this.state.selection.id === sp.instanceId;
@@ -461,7 +466,7 @@ export class SceneManager {
       });
     }
 
-    if (needMic && micViz.pickupRegions && room) {
+    if (needMic && (micViz.pickupRegions || isPres) && room) {
       const resolved = resolveProjectMicrophones(this.state.equipment, catalog);
       resolved.forEach((mic) => {
         if (!mic.pickupRegion) return;
@@ -470,16 +475,22 @@ export class SceneManager {
       });
     }
 
-    if (needDisplay && display && (viz.sightlines !== 'off' || this.state.highlightedSeatIds.length)) {
+    const showSightlines =
+      (needDisplay && viz.sightlines !== 'off') ||
+      (isPres && this.state.presentationOverlays.sightlines) ||
+      this.state.highlightedSeatIds.length > 0;
+    if (needDisplay && display && showSightlines) {
       const highlight = this.state.highlightedSeatIds;
       const seats =
         highlight.length
           ? this.state.seats.filter((s) => highlight.includes(s.id))
-          : viz.sightlines === 'selected' && this.state.selection.kind === 'seat' && this.state.selection.id
-            ? this.state.seats.filter((s) => s.id === this.state.selection.id)
-            : viz.sightlines === 'all'
-              ? this.state.seats
-              : [];
+          : isPres && this.state.presentationOverlays.sightlines
+            ? this.state.seats
+            : viz.sightlines === 'selected' && this.state.selection.kind === 'seat' && this.state.selection.id
+              ? this.state.seats.filter((s) => s.id === this.state.selection.id)
+              : viz.sightlines === 'all'
+                ? this.state.seats
+                : [];
       const statuses = computeSeatStatuses(this.state.seats, display, obstacles);
       seats.forEach((seat) => {
         const eye = occupantEyeWorld(seat);
@@ -527,6 +538,7 @@ export class SceneManager {
     const show =
       this.state.viewMode === '3d' &&
       !this.state.viewerMode.active &&
+      !this.state.presentationMode &&
       isTransformable &&
       !!this.selectedMesh;
     this.transformControls.visible = show;
@@ -766,7 +778,7 @@ export class SceneManager {
 
     if (!vm.active || !vm.seatId) {
       this.cameraController.controls.enabled = true;
-      if (this.state.room) this.cameraController.frameRoom(this.state.room.width, this.state.room.depth, this.state.room.height);
+      if (this.state.room && !this.state.presentationMode) this.cameraController.frameRoom(this.state.room.width, this.state.room.depth, this.state.room.height);
       return;
     }
 
@@ -783,8 +795,70 @@ export class SceneManager {
     this.cameraController.controls.enabled = false;
   }
 
+  private syncPresentationMode(): void {
+    const presSig = `${this.state.presentationMode}_${this.state.presentationStop}`;
+    if (presSig === this.lastPresentationSignature) return;
+    this.lastPresentationSignature = presSig;
+
+    if (!this.state.presentationMode) {
+      this.cameraController.controls.enabled = true;
+      return;
+    }
+
+    const room = this.state.room;
+    if (!room) return;
+
+    const stop = this.state.presentationStop;
+    const diag = Math.hypot(room.width, room.depth);
+
+    if (stop === 'overview') {
+      const targetPos = new THREE.Vector3(diag * 0.52, Math.max(room.height * 1.5, 3.2), diag * 0.52);
+      const targetLookAt = new THREE.Vector3(0, room.height * 0.35, 0);
+      this.cameraController.animateTo(targetPos, targetLookAt, 850);
+    } else if (stop === 'presenter') {
+      // Standing at front presentation wall facing the table/audience
+      const display = this.activeDisplay();
+      const posX = display ? display.position.x : 0;
+      const posZ = display ? display.position.z + (display.position.z < 0 ? 1.0 : -1.0) : -room.depth * 0.35;
+      const targetPos = new THREE.Vector3(posX, 1.65, posZ);
+      const targetLookAt = new THREE.Vector3(0, 1.0, 0);
+      this.cameraController.animateTo(targetPos, targetLookAt, 850);
+    } else if (stop === 'seated') {
+      // First-person seated perspective from the primary seat looking toward the display
+      const display = this.activeDisplay();
+      const centerSeat = this.state.seats.length
+        ? this.state.seats.slice().sort((a, b) => (Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z)))[0]
+        : null;
+
+      if (centerSeat) {
+        const pose = computeViewerPose(centerSeat, display, DEFAULT_EYE_HEIGHT_M);
+        const targetPos = new THREE.Vector3(pose.position.x, pose.position.y, pose.position.z);
+        const targetLookAt = new THREE.Vector3(pose.lookAt.x, pose.lookAt.y, pose.lookAt.z);
+        this.cameraController.animateTo(targetPos, targetLookAt, 850);
+      } else {
+        const targetPos = new THREE.Vector3(0, 1.2, room.depth * 0.25);
+        const targetLookAt = new THREE.Vector3(0, 1.4, display ? display.position.z : -room.depth * 0.4);
+        this.cameraController.animateTo(targetPos, targetLookAt, 850);
+      }
+    } else if (stop === 'display') {
+      // Front framed perspective squarely facing primary display & front technology wall
+      const display = this.activeDisplay();
+      if (display) {
+        const dist = Math.max(3.2, room.depth * 0.45);
+        const sign = display.position.z < 0 ? 1 : -1;
+        const targetPos = new THREE.Vector3(display.position.x, display.position.y + 0.1, display.position.z + sign * dist);
+        const targetLookAt = new THREE.Vector3(display.position.x, display.position.y, display.position.z);
+        this.cameraController.animateTo(targetPos, targetLookAt, 850);
+      } else {
+        const targetPos = new THREE.Vector3(0, room.height * 0.5, room.depth * 0.4);
+        const targetLookAt = new THREE.Vector3(0, room.height * 0.45, -room.depth * 0.45);
+        this.cameraController.animateTo(targetPos, targetLookAt, 850);
+      }
+    }
+  }
+
   private onClick(e: MouseEvent): void {
-    if (this.state.viewerMode.active || this.dragging) return;
+    if (this.state.viewerMode.active || this.state.presentationMode || this.dragging) return;
     const rect = this.renderer.domElement.getBoundingClientRect();
     this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;

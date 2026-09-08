@@ -132,6 +132,14 @@ export interface AVRequirements {
 export type SelectionKind = 'seat' | 'equipment' | 'table' | 'room' | 'rack' | 'none';
 export type ViewportTool = 'select' | 'move' | 'rotate' | 'measure';
 export type CameraViewPreset = 'persp' | 'top' | 'front' | 'left' | 'right';
+export type PresentationTourStop = 'overview' | 'presenter' | 'seated' | 'display';
+
+export interface PresentationOverlaySettings {
+  sightlines: boolean;
+  audio: boolean;
+  mic: boolean;
+  camera: boolean;
+}
 
 export interface Selection {
   kind: SelectionKind;
@@ -316,6 +324,17 @@ export class AppState {
   validationDeltaMessage = '';
   detailsFindingId: string | null = null;
   healthHudOpen = false;
+
+  /** Client Presentation Mode (§20, §25, §28) — not part of undo snapshots. */
+  presentationMode = false;
+  presentationStop: PresentationTourStop = 'overview';
+  presentationOverlays: PresentationOverlaySettings = {
+    sightlines: true,
+    audio: false,
+    mic: false,
+    camera: false
+  };
+  presentationSavedPanels: { leftCollapsed: boolean; rightCollapsed: boolean } | null = null;
 
   /** Auto Design session — not part of undo snapshots. */
   autoDesignOpen = false;
@@ -1910,6 +1929,64 @@ export class AppState {
     } finally {
       this.historySuspended = false;
     }
+  }
+
+  /**
+   * Enters Client Presentation Mode (§20, §25, §28).
+   * Switches to 3D, collapses sidebars, clears editing selections/gizmos,
+   * and sets the tour stop to overview.
+   */
+  enterPresentationMode(): void {
+    if (this.presentationMode) return;
+    this.presentationSavedPanels = {
+      leftCollapsed: this.leftPanelCollapsed,
+      rightCollapsed: this.rightPanelCollapsed
+    };
+    this.leftPanelCollapsed = true;
+    this.rightPanelCollapsed = true;
+    this.presentationMode = true;
+    this.viewMode = '3d';
+    this.selection = { kind: 'none', id: null };
+    this.presentationStop = 'overview';
+    this.notify();
+  }
+
+  /** Exits Presentation Mode and restores previous layout panels. */
+  exitPresentationMode(): void {
+    if (!this.presentationMode) return;
+    this.presentationMode = false;
+    if (this.presentationSavedPanels) {
+      this.leftPanelCollapsed = this.presentationSavedPanels.leftCollapsed;
+      this.rightPanelCollapsed = this.presentationSavedPanels.rightCollapsed;
+      this.presentationSavedPanels = null;
+    }
+    this.notify();
+  }
+
+  togglePresentationMode(): void {
+    if (this.presentationMode) this.exitPresentationMode();
+    else this.enterPresentationMode();
+  }
+
+  setPresentationStop(stop: PresentationTourStop): void {
+    if (this.presentationStop === stop) return;
+    this.presentationStop = stop;
+    this.notify();
+  }
+
+  stepPresentationStop(direction: 1 | -1): void {
+    const stops: PresentationTourStop[] = ['overview', 'presenter', 'seated', 'display'];
+    const idx = stops.indexOf(this.presentationStop);
+    const nextIdx = (idx + direction + stops.length) % stops.length;
+    this.setPresentationStop(stops[nextIdx]);
+  }
+
+  togglePresentationOverlay(layer: keyof PresentationOverlaySettings): void {
+    this.presentationOverlays = {
+      ...this.presentationOverlays,
+      [layer]: !this.presentationOverlays[layer]
+    };
+    this.notify();
   }
 }
 

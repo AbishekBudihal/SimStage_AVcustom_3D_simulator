@@ -56,6 +56,47 @@ export class CameraController {
     this.controls.update();
   }
 
+  private animationId: number | null = null;
+
+  /** Smoothly interpolates camera position and controls target to desired vectors. */
+  animateTo(targetPos: THREE.Vector3, targetLookAt: THREE.Vector3, durationMs = 800): Promise<void> {
+    return new Promise((resolve) => {
+      this.cancelAnimation();
+      const startPos = this.camera.position.clone();
+      const startTarget = this.controls.target.clone();
+      const startTime = performance.now();
+
+      const step = (currentTime: number) => {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(1, elapsed / durationMs);
+        // Smooth cubic ease in-out
+        const ease = progress < 0.5
+          ? 4 * progress * progress * progress
+          : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+
+        this.camera.position.lerpVectors(startPos, targetPos, ease);
+        this.controls.target.lerpVectors(startTarget, targetLookAt, ease);
+        this.controls.update();
+
+        if (progress < 1) {
+          this.animationId = requestAnimationFrame(step);
+        } else {
+          this.animationId = null;
+          resolve();
+        }
+      };
+
+      this.animationId = requestAnimationFrame(step);
+    });
+  }
+
+  cancelAnimation(): void {
+    if (this.animationId !== null) {
+      cancelAnimationFrame(this.animationId);
+      this.animationId = null;
+    }
+  }
+
   update(): void {
     this.controls.update();
   }
