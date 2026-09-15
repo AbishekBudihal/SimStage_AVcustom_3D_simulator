@@ -1,3 +1,22 @@
+# Active workspace slice
+
+The main application now starts in `src/App.tsx`: React inventory, the Three.js
+workspace canvas, and a live status sidebar. Run `npm run dev` to open the local
+workspace, `npm run build` for the production bundle, and
+`npx vitest run tests/workspace` for the active module tests.
+
+Inventory buttons place generic device proxies. Drag equipment on its mounting
+plane, press Escape to cancel a drag, switch between plan and isometric views,
+and remove the selected device in the status panel. State is session-only.
+Engineering metadata starts unknown; the status panel does not claim coverage,
+connectivity or collision validation.
+
+The TypeScript build includes the new entry point, App and workspace modules.
+Legacy source and tests below are retained for reference and excluded from the
+active build; they still contain pre-existing errors. The older product overview
+below describes that legacy application, not the current vertical slice.
+
+---
 # AV System Engineering Simulator
 
 3D engineering tool for **AV system design**: room geometry, equipment placement, rack planning, geometric coverage *estimates*, sightline/viewing checks, signal-path connectivity, cable routing, and rule-based design validation.
@@ -141,3 +160,4 @@ No license file in this repository yet. Treat as source-available for portfolio 
 
 ### Managed By: 
 Abishek Budihal
+
