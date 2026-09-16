@@ -1,21 +1,25 @@
-# Active workspace slice
+# Active dual-engine workspace
 
-The main application now starts in `src/App.tsx`: React inventory, the Three.js
-workspace canvas, and a live status sidebar. Run `npm run dev` to open the local
-workspace, `npm run build` for the production bundle, and
-`npx vitest run tests/workspace` for the active module tests.
+Run `npm run dev`, `npm run build`, or `npm test` for the active application.
 
-Inventory buttons place generic device proxies. Drag equipment on its mounting
-plane, press Escape to cancel a drag, switch between plan and isometric views,
-and remove the selected device in the status panel. State is session-only.
-Engineering metadata starts unknown; the status panel does not claim coverage,
-connectivity or collision validation.
+- **Spatial workspace:** architectural cutaway, conference table and seating,
+  distinct procedural devices, Plan/Isometric/Seat views, inventory placement,
+  table/wall/ceiling snapping and Alt-drag remounting with Escape rollback.
+- **Signal schematic:** synchronized port nodes, draggable node layout, pan/zoom,
+  compatible port connections, rounded orthogonal wiring and connection deletion.
+- **Planning audit:** seat-level viewing checks, direct SPL and optional broadband
+  intelligibility-proxy maps, specified power/heat totals and project budget warnings.
+- **Contextual inspector:** mounting, orientation, height and editable equipment
+  specifications. The BOM updates from the same Zustand state.
 
-The TypeScript build includes the new entry point, App and workspace modules.
-Legacy source and tests below are retained for reference and excluded from the
-active build; they still contain pre-existing errors. The older product overview
-below describes that legacy application, not the current vertical slice.
+The opening boardroom is illustrative; unknown device specifications remain unknown.
+The acoustic preset is explicitly illustrative. State is session-only.
+**These are planning estimates, not certified DISCAS compliance or IEC STI.**
+See [engineering basis and limitations](src/workspace/ENGINEERING.md).
 
+The build and test script target the new application and workspace modules. Legacy
+source and tests remain for reference and are not included in the active build.
+The historical overview below describes the old application.
 ---
 # AV System Engineering Simulator
 
@@ -160,4 +164,3 @@ No license file in this repository yet. Treat as source-available for portfolio 
 
 ### Managed By: 
 Abishek Budihal
-

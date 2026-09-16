@@ -1,18 +1,18 @@
 # Workspace core
 
-An independent Three.js vertical-slice foundation. The existing main entry point is unchanged.
+The active React application mounts this dual-engine workspace from `src/App.tsx`. See [ENGINEERING.md](./ENGINEERING.md) for mathematical assumptions and limitations.
 No React dependency: `useDeviceDrag` installs pointer handlers and returns a cleanup function.
 
 ```ts
-import { CanvasManager } from './workspace/CanvasManager';
-import { DeviceStore, snapToSurface } from './workspace/DeviceStore';
-import { useDeviceDrag } from './workspace/useDeviceDrag';
+import { CanvasManager } from "./workspace/CanvasManager";
+import { DeviceStore, snapToSurface } from "./workspace/DeviceStore";
+import { useDeviceDrag } from "./workspace/useDeviceDrag";
 
 const room = { width: 8, depth: 6, height: 3 };
 const store = new DeviceStore();
 const canvas = new CanvasManager(viewportElement, {
   room,
-  onSelect: id => store.api.getState().selectDevice(id),
+  onSelect: (id) => store.api.getState().selectDevice(id),
 });
 const sync = () => {
   const { devices, selectedId } = store.api.getState();
@@ -22,12 +22,22 @@ const unsubscribe = store.api.subscribe(sync);
 const disposeDrag = useDeviceDrag(canvas, store);
 sync();
 store.add({
-  catalogId: 'example-display', kind: 'display', surface: 'north',
-  position: snapToSurface({ x: 0, y: 1.5, z: -3 }, 'north', room),
-  rotation: { x: 0, y: 0, z: 0 }, ports: [{ id: 'hdmi-in-1', label: 'HDMI 1', signal: 'HDMI', direction: 'input' }],
-  metadata: { label: 'Display', powerWatts: null, heatBtuPerHour: null, rackUnits: null },
+  catalogId: "example-display",
+  kind: "display",
+  surface: "north",
+  position: snapToSurface({ x: 0, y: 1.5, z: -3 }, "north", room),
+  rotation: { x: 0, y: 0, z: 0 },
+  ports: [
+    { id: "hdmi-in-1", label: "HDMI 1", signal: "HDMI", direction: "input" },
+  ],
+  metadata: {
+    label: "Display",
+    powerWatts: null,
+    heatBtuPerHour: null,
+    rackUnits: null,
+  },
 });
-canvas.setView('plan');
+canvas.setView("plan");
 // On workspace unmount:
 disposeDrag();
 unsubscribe();
@@ -38,7 +48,7 @@ The host needs a nonzero explicit height. Coordinates are metres, Y-up, with the
 origin at the floor centre. Device positions are mounting anchors. Surface names
 north/south map to negative/positive Z; east/west to positive/negative X.
 Call `snapToSurface` before initial insertion. Dragging preserves the original
-mounting surface; switching walls requires a future placement operation.
+mounting surface by default. Alt-drag intersects compatible room surfaces; the inspector also allows explicit remounting. Escape restores both position and original surface.
 
 Records are immutable and authoritative; scene meshes derive from incremental store
 events. Pointer movement updates state synchronously, with at most one queued render.
@@ -52,7 +62,7 @@ Escape, pointer cancellation, lost capture and window blur restore the starting 
 Wall movement viewed edge-on is ignored; use isometric view to move vertically.
 
 The shapes are lightweight equipment proxies. Bounds constrain anchors, not complete
-device footprints. Product dimensions, collisions, mounting compatibility, selection UI,
+device footprints. Verified product dimensions, collision handling,
 history, persistence and WebGL context recovery are subsequent implementation work.
 No frame-rate guarantee has been measured. BOM consumers can read `store.snapshot()`;
 unknown power and heat values remain null rather than being silently treated as zero.
@@ -63,7 +73,6 @@ Validation:
 npx tsc -p tsconfig.workspace.json
 npx vitest run tests/workspace
 ```
-
 
 ## Zustand state API
 

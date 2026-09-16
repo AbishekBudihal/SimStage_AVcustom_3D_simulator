@@ -1,70 +1,163 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import * as THREE from 'three';
-import { CanvasManager } from '../../src/workspace/CanvasManager';
-import type { PlacedDevice } from '../../src/workspace/DeviceStore';
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as THREE from "three";
+import { CanvasManager } from "../../src/workspace/CanvasManager";
+import type { PlacedDevice } from "../../src/workspace/DeviceStore";
 
-const mocks = vi.hoisted(() => ({ render: vi.fn(), dispose: vi.fn(), disconnect: vi.fn(), listeners: new Map<string, (event: unknown) => void>() }));
-vi.mock('three', async importOriginal => {
-  const actual = await importOriginal<typeof import('three')>();
-  return { ...actual, WebGLRenderer: class {
-    domElement = {
-      style: { cssText: '' }, remove: vi.fn(),
-      getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600 }),
-      addEventListener: (name: string, listener: (event: unknown) => void) => mocks.listeners.set(name, listener),
-      removeEventListener: (name: string) => mocks.listeners.delete(name),
-    };
-    setClearColor = vi.fn(); setPixelRatio = vi.fn(); setSize = vi.fn();
-    render = mocks.render; dispose = mocks.dispose;
-  } };
+const mocks = vi.hoisted(() => ({
+  render: vi.fn(),
+  dispose: vi.fn(),
+  disconnect: vi.fn(),
+  listeners: new Map<string, (event: unknown) => void>(),
+}));
+vi.mock("three", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("three")>();
+  return {
+    ...actual,
+    WebGLRenderer: class {
+      domElement = {
+        style: { cssText: "" },
+        remove: vi.fn(),
+        getBoundingClientRect: () => ({
+          left: 0,
+          top: 0,
+          width: 800,
+          height: 600,
+        }),
+        addEventListener: (name: string, listener: (event: unknown) => void) =>
+          mocks.listeners.set(name, listener),
+        removeEventListener: (name: string) => mocks.listeners.delete(name),
+      };
+      setClearColor = vi.fn();
+      setPixelRatio = vi.fn();
+      setSize = vi.fn();
+      render = mocks.render;
+      dispose = mocks.dispose;
+    },
+  };
 });
 const device: PlacedDevice = {
-  id: 'one', catalogId: 'rack', kind: 'rack', surface: 'floor',
-  position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, ports: [],
-  metadata: { label: 'Rack', powerWatts: null, heatBtuPerHour: null, rackUnits: 42 },
+  id: "one",
+  catalogId: "rack",
+  kind: "rack",
+  surface: "floor",
+  position: { x: 0, y: 0, z: 0 },
+  rotation: { x: 0, y: 0, z: 0 },
+  ports: [],
+  metadata: {
+    label: "Rack",
+    powerWatts: null,
+    heatBtuPerHour: null,
+    rackUnits: 42,
+  },
 };
 let manager: CanvasManager;
 let frames: Map<number, FrameRequestCallback>;
 let onSelect: ReturnType<typeof vi.fn>;
 function flush() {
-  const pending = [...frames.values()]; frames.clear();
-  pending.forEach(callback => callback(performance.now()));
+  const pending = [...frames.values()];
+  frames.clear();
+  pending.forEach((callback) => callback(performance.now()));
 }
 beforeEach(() => {
-  vi.clearAllMocks(); mocks.listeners.clear(); frames = new Map();
+  vi.clearAllMocks();
+  mocks.listeners.clear();
+  frames = new Map();
   let nextFrame = 0;
-  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frames.set(++nextFrame, callback); return nextFrame; });
-  vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
-  vi.stubGlobal('window', { devicePixelRatio: 3, matchMedia: () => ({ matches: false }) });
-  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect = mocks.disconnect; });
-  const host = { appendChild: vi.fn(), getBoundingClientRect: () => ({ width: 800, height: 600 }) } as unknown as HTMLElement;
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+    frames.set(++nextFrame, callback);
+    return nextFrame;
+  });
+  vi.stubGlobal("cancelAnimationFrame", (id: number) => frames.delete(id));
+  vi.stubGlobal("window", {
+    devicePixelRatio: 3,
+    matchMedia: () => ({ matches: false }),
+  });
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect = mocks.disconnect;
+    },
+  );
+  const host = {
+    appendChild: vi.fn(),
+    getBoundingClientRect: () => ({ width: 800, height: 600 }),
+  } as unknown as HTMLElement;
   onSelect = vi.fn();
   manager = new CanvasManager(host, { onSelect });
   flush();
 });
-afterEach(() => { manager.dispose(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
-describe('CanvasManager', () => {
-  it('snaps between perspective seat and orthographic overview cameras', () => {
-    manager.setView('seat', false);
+afterEach(() => {
+  manager.dispose();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+describe("CanvasManager", () => {
+  it("reuses the instanced heatmap and does not allocate or render a disabled layer", () => {
+    const field = [
+      { x: 0, z: 0, spl: 70, intelligibility: 0.7 },
+      { x: 1, z: 0, spl: null, intelligibility: null },
+    ];
+    manager.setHeatmap("off", field);
+    expect(
+      manager.scene.children.some(
+        (child) => child instanceof THREE.InstancedMesh,
+      ),
+    ).toBe(false);
+    manager.setHeatmap("spl", field);
+    const layer = manager.scene.children.find(
+      (child) => child instanceof THREE.InstancedMesh,
+    ) as THREE.InstancedMesh;
+    expect(layer.count).toBe(2);
+    const unknown = new THREE.Color();
+    layer.getColorAt(1, unknown);
+    expect(unknown.getHex()).toBe(0x526172);
+    manager.setHeatmap("intelligibility", field);
+    expect(manager.scene.children.includes(layer)).toBe(true);
+    manager.setHeatmap("off");
+    flush();
+    expect(layer.visible).toBe(false);
+    manager.setHeatmap("off", field);
+    expect(frames.size).toBe(0);
+  });
+  it("snaps between perspective seat and orthographic overview cameras", () => {
+    manager.setView("seat", false);
     expect(manager.camera).toBeInstanceOf(THREE.PerspectiveCamera);
     expect(manager.camera.position.y).toBe(1.2);
-    expect(manager.camera.getWorldDirection(new THREE.Vector3()).z).toBeCloseTo(-1);
-    flush(); expect(frames.size).toBe(0);
-    manager.setView('plan', false);
+    expect(manager.camera.getWorldDirection(new THREE.Vector3()).z).toBeCloseTo(
+      -1,
+    );
+    flush();
+    expect(frames.size).toBe(0);
+    manager.setView("plan", false);
     expect(manager.camera).toBeInstanceOf(THREE.OrthographicCamera);
     expect(manager.camera.position.x).toBe(0);
-    manager.setView('isometric', false);
+    manager.setView("isometric", false);
     expect(manager.camera.position.x).toBeCloseTo(manager.camera.position.y);
-    flush(); expect(frames.size).toBe(0);
+    flush();
+    expect(frames.size).toBe(0);
   });
-  it('uses dark background, required lights and half-metre grid lines', () => {
-    expect((manager.scene.background as THREE.Color).getHexString()).toBe('0f1115');
-    expect(manager.scene.children.some(child => child instanceof THREE.AmbientLight)).toBe(true);
-    expect(manager.scene.children.some(child => child instanceof THREE.DirectionalLight)).toBe(true);
-    const grid = manager.scene.children.find(child => child instanceof THREE.GridHelper) as THREE.GridHelper;
-    const positions = grid.geometry.getAttribute('position');
+  it("uses dark background, required lights and half-metre grid lines", () => {
+    expect((manager.scene.background as THREE.Color).getHexString()).toBe(
+      "0f1115",
+    );
+    expect(
+      manager.scene.children.some(
+        (child) => child instanceof THREE.AmbientLight,
+      ),
+    ).toBe(true);
+    expect(
+      manager.scene.children.some(
+        (child) => child instanceof THREE.DirectionalLight,
+      ),
+    ).toBe(true);
+    const grid = manager.scene.children.find(
+      (child) => child instanceof THREE.GridHelper,
+    ) as THREE.GridHelper;
+    const positions = grid.geometry.getAttribute("position");
     expect(positions.getZ(4) - positions.getZ(0)).toBe(0.5);
   });
-  it('reuses meshes, batches updates and schedules no idle frames', () => {
+  it("reuses meshes, batches updates and schedules no idle frames", () => {
     manager.syncDevices([device], null);
     const mesh = manager.pickTargets[0] as THREE.Mesh;
     const geometry = mesh.geometry;
@@ -73,34 +166,50 @@ describe('CanvasManager', () => {
     expect(mesh.geometry).toBe(geometry);
     expect(mesh.position.x).toBe(1);
     expect(frames.size).toBe(1);
-    flush(); expect(frames.size).toBe(0);
+    flush();
+    expect(frames.size).toBe(0);
   });
-  it('isolates selection materials and removes deleted meshes', () => {
-    const other = { ...device, id: 'two' };
-    manager.syncDevices([device, other], 'one');
+  it("isolates selection materials and removes deleted meshes", () => {
+    const other = { ...device, id: "two" };
+    manager.syncDevices([device, other], "one");
     const [first, second] = manager.pickTargets as THREE.Mesh[];
     expect(first.material).not.toBe(second.material);
     manager.syncDevices([device, other], null);
     expect(first.material).toBe(second.material);
-    flush(); manager.syncDevices([device, other], null);
+    flush();
+    manager.syncDevices([device, other], null);
     expect(frames.size).toBe(0);
     manager.syncDevices([other], null);
     expect(manager.pickTargets).toEqual([second]);
   });
-  it('raycasts selection and clears selection on empty space', () => {
+  it("raycasts selection and clears selection on empty space", () => {
     manager.syncDevices([device], null);
-    manager.setView('plan', false);
-    mocks.listeners.get('pointerdown')?.({ isPrimary: true, button: 0, clientX: 400, clientY: 300 });
-    expect(onSelect).toHaveBeenLastCalledWith('one');
-    mocks.listeners.get('pointerdown')?.({ isPrimary: true, button: 0, clientX: 0, clientY: 0 });
+    manager.setView("plan", false);
+    mocks.listeners.get("pointerdown")?.({
+      isPrimary: true,
+      button: 0,
+      clientX: 400,
+      clientY: 300,
+    });
+    expect(onSelect).toHaveBeenLastCalledWith("one");
+    mocks.listeners.get("pointerdown")?.({
+      isPrimary: true,
+      button: 0,
+      clientX: 0,
+      clientY: 0,
+    });
     expect(onSelect).toHaveBeenLastCalledWith(null);
   });
-  it('disposes resources once and ignores subsequent updates', () => {
-    manager.syncDevices([device], 'one');
+  it("disposes resources once and ignores subsequent updates", () => {
+    manager.syncDevices([device], "one");
     const mesh = manager.pickTargets[0] as THREE.Mesh;
-    const geometryDispose = vi.spyOn(mesh.geometry, 'dispose');
-    const materialDispose = vi.spyOn(mesh.material as THREE.Material, 'dispose');
-    manager.dispose(); manager.dispose();
+    const geometryDispose = vi.spyOn(mesh.geometry, "dispose");
+    const materialDispose = vi.spyOn(
+      mesh.material as THREE.Material,
+      "dispose",
+    );
+    manager.dispose();
+    manager.dispose();
     manager.syncDevices([device], null);
     expect(geometryDispose).toHaveBeenCalledTimes(1);
     expect(materialDispose).toHaveBeenCalledTimes(1);
