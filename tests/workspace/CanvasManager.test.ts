@@ -3,6 +3,9 @@ import * as THREE from "three";
 import { CanvasManager } from "../../src/workspace/CanvasManager";
 import type { PlacedDevice } from "../../src/workspace/DeviceStore";
 
+import { ROOM_PRESETS } from "../../src/workspace/RoomPresets";
+import { createWorkspace } from "../../src/workspace/createWorkspace";
+import { engineeringAudit } from "../../src/workspace/Engineering";
 const mocks = vi.hoisted(() => ({
   render: vi.fn(),
   dispose: vi.fn(),
@@ -93,6 +96,51 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 describe("CanvasManager", () => {
+  it("disposes replaced room resources and preserves renderer and device objects", () => {
+    manager.syncDevices([device], null);
+    const mesh = manager.pickTargets[0],
+      renderer = manager.renderer;
+    const old = manager.scene.getObjectByName("Architectural room")!;
+    const dispose = vi.spyOn(
+      (old.children[0] as THREE.Mesh).geometry,
+      "dispose",
+    );
+    manager.setRoom(ROOM_PRESETS.training.room);
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(manager.renderer).toBe(renderer);
+    expect(manager.pickTargets[0]).toBe(mesh);
+    expect(manager.scene.children).not.toContain(old);
+    manager.setRoom(ROOM_PRESETS.training.room);
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+  it("updates and reuses visual instances, replacing them only when seating count changes", () => {
+    const store = createWorkspace();
+    const audit = () =>
+      engineeringAudit(store.api.getState(), store.api.getState().room);
+    manager.setVisualOverlay(true, audit().visual);
+    const layer = manager.scene.getObjectByName(
+      "Visual planning seat markers",
+    ) as THREE.InstancedMesh;
+    const dispose = vi.spyOn(layer.geometry, "dispose");
+    const color = new THREE.Color();
+    layer.getColorAt(0, color);
+    expect(color.getHex()).toBe(0x26d99a);
+    store.api.getState().setEngineering({ viewingRatio: 4 });
+    manager.setVisualOverlay(true, audit().visual);
+    expect(manager.scene.children).toContain(layer);
+    layer.getColorAt(6, color);
+    expect(color.getHex()).toBe(0xf45363);
+    store.api.getState().setRoomPreset("training");
+    manager.setVisualOverlay(true, audit().visual);
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(
+      (
+        manager.scene.getObjectByName(
+          "Visual planning seat markers",
+        ) as THREE.InstancedMesh
+      ).count,
+    ).toBe(24);
+  });
   it("reuses the instanced heatmap and does not allocate or render a disabled layer", () => {
     const field = [
       { x: 0, z: 0, spl: 70, intelligibility: 0.7 },

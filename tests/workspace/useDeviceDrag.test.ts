@@ -73,7 +73,9 @@ function setup(
       camera,
       scene,
       pickTargets: [mesh],
-      room: { width: 8, height: 3, depth: 6 },
+      get room() {
+        return store.api.getState().room;
+      },
     } as unknown as CanvasManager,
     store,
   );
@@ -106,6 +108,18 @@ function setup(
 }
 
 describe("device dragging with real Three.js ray intersections", () => {
+  it("does not restore old room coordinates when a preset changes during drag", () => {
+    const origin = { x: 0, y: 1, z: -3 },
+      test = setup("north", origin);
+    test.pointer("pointerdown", origin);
+    test.store.api.getState().setRoomPreset("huddle");
+    test.windowListeners.get("keydown")?.({
+      key: "Escape",
+      preventDefault: vi.fn(),
+    });
+    expect(test.store.get("one")!.position.z).toBe(-1.5);
+    expect(test.captures.size).toBe(0);
+  });
   it("remounts a table device with Alt-drag and restores surface on Escape", () => {
     const origin = { x: 0, y: 0.75, z: 0 };
     const test = setup("table", origin);

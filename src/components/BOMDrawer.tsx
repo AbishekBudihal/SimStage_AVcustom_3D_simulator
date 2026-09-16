@@ -27,7 +27,7 @@ export function BOMDrawer({ store }: { store: DeviceStore }) {
           <span className="ml-2 text-slate-400">{bom.count} devices</span>
         </strong>
         <span className="text-xs text-slate-400">
-          Known load: {bom.power.toLocaleString()} W ·{" "}
+          Planning load: {bom.power.toLocaleString()} W ·{" "}
           {bom.heat.toLocaleString()} BTU/h{" "}
           <span className="ml-4">{open ? "Collapse −" : "Expand +"}</span>
         </span>
@@ -38,7 +38,10 @@ export function BOMDrawer({ store }: { store: DeviceStore }) {
             className={`text-xs ${bom.incomplete ? "text-amber-300" : "text-slate-300"}`}
             role="status"
           >
-            {health}. Known loads only; see Design health for planning checks.
+            {health}. Mixed typical, maximum and upper-bound ratings; calculated
+            heat is not measured HVAC load. PoE export may be double-counted;
+            passive speaker drive excludes amplifier mains consumption. See
+            hardware sources in the inspector.
           </p>
           <table className="w-full border-collapse text-left text-xs">
             <thead className="text-slate-400">

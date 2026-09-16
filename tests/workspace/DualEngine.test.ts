@@ -50,7 +50,7 @@ describe("signal graph synchronization", () => {
     expect(
       store.api.getState().connections.some((c) => c.id === connection.id),
     ).toBe(false);
-    const next = store.api.getState().connections[0];
+    const next = connection;
     store.api.getState().moveNode(next.to.deviceId, { x: 10, y: 20 });
     store.remove(next.to.deviceId);
     expect(
@@ -126,10 +126,11 @@ describe("engineering planning estimates", () => {
   });
   it("exposes back-row warnings, unknown inputs and load budget violations", () => {
     const store = createWorkspace();
+    store.api.getState().setEngineering({ viewingRatio: 4 });
     let result = engineeringAudit(store.api.getState(), ROOM);
     expect(result.warnings.some((w) => w.startsWith("Back row"))).toBe(true);
     expect(
-      result.field.every((p) => p.spl === null && p.intelligibility === null),
+      result.field.every((p) => p.spl !== null && p.intelligibility === null),
     ).toBe(true);
     const first = store.snapshot()[0];
     store.update(first.id, {

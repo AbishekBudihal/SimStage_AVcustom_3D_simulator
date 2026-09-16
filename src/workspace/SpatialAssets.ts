@@ -103,30 +103,38 @@ export class SpatialAssets {
           ),
         );
     }
-    // Translate geometry/details so root position remains the mounting anchor.
-    const [, height, depth] = dimensions(device.kind);
+    // Normalize all procedural details to the physical manufacturer's outer envelope.
+    root.updateMatrixWorld(true);
+    const bounds = new T.Box3().setFromObject(root);
+    const size = bounds.getSize(new T.Vector3());
+    const centre = bounds.getCenter(new T.Vector3());
+    const target = device.dimensions;
+    const scale = target
+      ? new T.Vector3(target.x / size.x, target.y / size.y, target.z / size.z)
+      : new T.Vector3(1, 1, 1);
+    const height = size.y * scale.y,
+      depth = size.z * scale.z;
     const offset =
       device.surface === "floor" || device.surface === "table"
         ? new T.Vector3(0, height / 2, 0)
         : device.surface === "ceiling"
           ? new T.Vector3(0, -height / 2, 0)
           : new T.Vector3(0, 0, depth / 2);
-    const key = `anchor:${device.kind}:${device.surface}`;
+    const matrix = new T.Matrix4()
+      .makeRotationY(surfaceYaw(device.surface))
+      .multiply(new T.Matrix4().makeTranslation(offset.x, offset.y, offset.z))
+      .multiply(new T.Matrix4().makeScale(scale.x, scale.y, scale.z))
+      .multiply(
+        new T.Matrix4().makeTranslation(-centre.x, -centre.y, -centre.z),
+      );
+    const key = `anchor:${device.kind}:${device.surface}:${JSON.stringify(target)}`;
     let anchor = this.geometries.get(key);
     if (!anchor) {
-      anchor = root.geometry.clone();
-      anchor.translate(offset.x, offset.y, offset.z);
-      anchor.rotateY(surfaceYaw(device.surface));
+      anchor = root.geometry.clone().applyMatrix4(matrix);
       this.geometries.set(key, anchor);
     }
     root.geometry = anchor;
-    details.position.copy(offset);
-    details.rotation.y = surfaceYaw(device.surface);
-    if (surfaceYaw(device.surface))
-      details.position.applyAxisAngle(
-        new T.Vector3(0, 1, 0),
-        surfaceYaw(device.surface),
-      );
+    details.applyMatrix4(matrix);
     root.userData.baseColor = 0x263343;
     root.traverse((object) => {
       object.userData.deviceId = device.id;
@@ -167,30 +175,32 @@ export class SpatialAssets {
         ),
       );
     const layout = roomLayout(room);
-    group.add(
-      this.box(
-        layout.tableWidth + 1.6,
-        0.012,
-        layout.tableDepth + 1.35,
-        0x87979c,
-        0,
-        0.014,
-        0,
-      ),
-    );
-    group.add(
-      this.box(
-        layout.tableWidth,
-        0.09,
-        layout.tableDepth,
-        0xc0a17a,
-        0,
-        layout.tableHeight - 0.045,
-        0,
-      ),
-    );
-    for (const z of [-layout.tableDepth * 0.3, layout.tableDepth * 0.3])
-      group.add(this.box(0.7, 0.67, 0.18, 0x414f5a, 0, 0.335, z));
+    group.add(this.box(w * 0.85, 0.012, d * 0.83, 0x87979c, 0, 0.014, 0));
+    for (const table of layout.tables) {
+      group.add(
+        this.box(
+          table.width,
+          0.09,
+          table.depth,
+          0xc0a17a,
+          table.x,
+          table.height - 0.045,
+          table.z,
+        ),
+      );
+      for (const x of [-table.width * 0.3, table.width * 0.3])
+        group.add(
+          this.box(
+            0.09,
+            table.height - 0.09,
+            table.depth * 0.7,
+            0x414f5a,
+            table.x + x,
+            (table.height - 0.09) / 2,
+            table.z,
+          ),
+        );
+    }
     for (const seat of layout.seats) {
       const chair = new T.Group();
       chair.position.set(seat.position.x, 0, seat.position.z);

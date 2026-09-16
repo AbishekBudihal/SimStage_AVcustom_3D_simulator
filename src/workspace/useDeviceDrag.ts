@@ -24,6 +24,7 @@ export function useDeviceDrag(
   let disposed = false;
   let active:
     | {
+        room: typeof canvas.room;
         pointerId: number;
         id: string;
         origin: XYZ;
@@ -94,6 +95,7 @@ export function useDeviceDrag(
       return;
     }
     active = {
+      room: canvas.room,
       pointerId: event.pointerId,
       id: device.id,
       origin: { ...device.position },
@@ -111,7 +113,11 @@ export function useDeviceDrag(
     if (!active || active.pointerId !== event.pointerId) return;
     const device = store.get(active.id);
     // Deletion or re-mounting externally ends this gesture without overwriting new state.
-    if (!device || device.surface !== active.surface) {
+    if (
+      !device ||
+      device.surface !== active.surface ||
+      active.room !== canvas.room
+    ) {
       finish(false);
       return;
     }
@@ -186,7 +192,11 @@ export function useDeviceDrag(
     const previous = active;
     active = undefined;
     try {
-      if (cancel && store.get(previous.id)?.surface === previous.surface)
+      if (
+        cancel &&
+        previous.room === canvas.room &&
+        store.get(previous.id)?.surface === previous.surface
+      )
         store.update(previous.id, {
           position: previous.origin,
           surface: previous.originalSurface,

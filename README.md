@@ -2,6 +2,8 @@
 
 Run `npm run dev`, `npm run build`, or `npm test` for the active application.
 
+- **Room presets:** Huddle (4 x 3 m), Boardroom (8 x 6 m), Training (14 x 8 m), with atomic device remapping and generated seating/tables.
+- **Hardware catalog:** source-linked Samsung, Shure, Q-SYS, Biamp, Sony and QSC profiles, physical dimensions/ports and power/heat provenance.
 - **Spatial workspace:** architectural cutaway, conference table and seating,
   distinct procedural devices, Plan/Isometric/Seat views, inventory placement,
   table/wall/ceiling snapping and Alt-drag remounting with Escape rollback.
@@ -12,7 +14,8 @@ Run `npm run dev`, `npm run build`, or `npm test` for the active application.
 - **Contextual inspector:** mounting, orientation, height and editable equipment
   specifications. The BOM updates from the same Zustand state.
 
-The opening boardroom is illustrative; unknown device specifications remain unknown.
+Visual seat markers show green/yellow/red planning thresholds. Speaker SPL responds to sensitivity, assumed amplifier drive power, distance and approximate directivity.
+The opening boardroom is illustrative; unspecified hardware details remain unknown.
 The acoustic preset is explicitly illustrative. State is session-only.
 **These are planning estimates, not certified DISCAS compliance or IEC STI.**
 See [engineering basis and limitations](src/workspace/ENGINEERING.md).

@@ -2,31 +2,35 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { CanvasManager, type WorkspaceView } from "./workspace/CanvasManager";
 import { useDeviceDrag } from "./workspace/useDeviceDrag";
-import { CATALOG, ROOM, catalogDevice } from "./workspace/Catalog";
+import { HARDWARE_CATALOG, hardwareDevice } from "./workspace/HardwareCatalog";
+import { ROOM_PRESETS, type RoomPresetId } from "./workspace/RoomPresets";
 import { createWorkspace } from "./workspace/createWorkspace";
 import { engineeringAudit } from "./workspace/Engineering";
-import type { DeviceKind, XYZ } from "./workspace/DeviceStore";
+import type { XYZ } from "./workspace/DeviceStore";
 import { PropertyInspector } from "./components/PropertyInspector";
 import { ViewportHUD } from "./components/ViewportHUD";
 import { BOMDrawer } from "./components/BOMDrawer";
 import { SchematicCanvas } from "./components/SchematicCanvas";
 import { EngineeringPanel } from "./components/EngineeringPanel";
 import "./workspace.css";
-
 export default function App() {
   const [store] = useState(createWorkspace);
   const devices = useStore(store.api, (s) => s.devices),
     connections = useStore(store.api, (s) => s.connections),
-    settings = useStore(store.api, (s) => s.engineering);
+    settings = useStore(store.api, (s) => s.engineering),
+    room = useStore(store.api, (s) => s.room),
+    roomPreset = useStore(store.api, (s) => s.roomPreset);
   const audit = useMemo(
-    () => engineeringAudit(store.api.getState(), ROOM),
-    [devices, connections, settings, store],
+    () => engineeringAudit(store.api.getState(), room),
+    [devices, connections, settings, store, room],
   );
   const host = useRef<HTMLDivElement>(null),
     canvas = useRef<CanvasManager | null>(null);
   const [view, setView] = useState<WorkspaceView>("isometric"),
     [tab, setTab] = useState<"spatial" | "schematic">("spatial");
-  const [heat, setHeat] = useState<"off" | "spl" | "intelligibility">("off");
+  const [heat, setHeat] = useState<
+    "off" | "spl" | "intelligibility" | "visual"
+  >("off");
   const [ready, setReady] = useState(false),
     [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -34,7 +38,7 @@ export default function App() {
     let manager: CanvasManager;
     try {
       manager = new CanvasManager(host.current, {
-        room: ROOM,
+        room: store.api.getState().room,
         onSelect: (id) => store.api.getState().selectDevice(id),
       });
     } catch (cause) {
@@ -44,6 +48,7 @@ export default function App() {
     canvas.current = manager;
     const sync = () => {
       const state = store.api.getState();
+      manager.setRoom(state.room);
       manager.syncDevices(state.devices, state.selectedId);
     };
     const unsubscribe = store.api.subscribe(sync),
@@ -58,11 +63,14 @@ export default function App() {
     };
   }, [store]);
   useEffect(() => {
-    canvas.current?.setHeatmap(heat, audit.field);
+    canvas.current?.setHeatmap(heat === "visual" ? "off" : heat, audit.field);
+    canvas.current?.setVisualOverlay(heat === "visual", audit.visual);
   }, [audit, heat, ready]);
-  function spawn(kind: DeviceKind, point?: XYZ) {
-    const count = store.snapshot().filter((d) => d.kind === kind).length;
-    const id = store.add(catalogDevice(kind, count, point));
+  function spawn(profileId: string, point?: XYZ) {
+    const count = store
+      .snapshot()
+      .filter((d) => d.catalogId === profileId).length;
+    const id = store.add(hardwareDevice(profileId, count, room, point));
     store.api.getState().selectDevice(id);
   }
   return (
@@ -76,7 +84,8 @@ export default function App() {
           <small>ONLINE INSTRUMENTS</small>
         </div>
         <div className="project-heading">
-          Boardroom concept<span>Spatial design + signal flow</span>
+          {ROOM_PRESETS[roomPreset].label}
+          <span>Spatial design + signal flow</span>
         </div>
         <span className="session-badge">
           Planning estimates · local session
@@ -87,30 +96,32 @@ export default function App() {
           <p className="eyebrow">SYSTEM BUILDER</p>
           <h1>Equipment library</h1>
           <p className="muted">
-            Click to place or drag into the room. Generic devices with editable
-            specifications.
+            Manufacturer profiles · click or drag to place. Published
+            specifications and source links in the inspector.
           </p>
           <div className="inventory-list">
-            {CATALOG.map((item) => (
+            {HARDWARE_CATALOG.map((item) => (
               <button
-                key={item.kind}
+                key={item.id}
                 draggable={ready}
                 disabled={!ready || !!error}
                 onDragStart={(e) => {
                   e.dataTransfer.setData(
                     "application/simstage-device",
-                    item.kind,
+                    item.id,
                   );
                   e.dataTransfer.effectAllowed = "copy";
                 }}
-                onClick={() => spawn(item.kind)}
+                onClick={() => spawn(item.id)}
                 className="inventory-button"
               >
                 <span className="device-icon" aria-hidden="true">
                   {item.icon}
                 </span>
                 <span>
-                  <strong>{item.label}</strong>
+                  <strong>
+                    {item.manufacturer} {item.model}
+                  </strong>
                   <small>
                     {item.ports.length} ports · {item.surface} mount
                   </small>
@@ -121,7 +132,27 @@ export default function App() {
           </div>
           <div className="panel-note">
             <span className="eyebrow">ROOM ENVELOPE</span>
-            <strong>8 × 6 × 3 m</strong>
+            <label className="engineering-input">
+              <span>Room preset</span>
+              <select
+                aria-label="Room preset"
+                value={roomPreset}
+                onChange={(e) =>
+                  store.api
+                    .getState()
+                    .setRoomPreset(e.target.value as RoomPresetId)
+                }
+              >
+                {Object.entries(ROOM_PRESETS).map(([id, preset]) => (
+                  <option key={id} value={id}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <strong>
+              {room.width} × {room.depth} × {room.height} m
+            </strong>
             <p>{audit.seats} seats · 0.75 m table · cutaway shell</p>
           </div>
         </aside>
@@ -148,8 +179,10 @@ export default function App() {
           >
             <div className="canvas-toolbar">
               <div>
-                <strong>Boardroom / {audit.seats} seats</strong>
-                <span>Cutaway view · 48 m²</span>
+                <strong>
+                  {ROOM_PRESETS[roomPreset].label} / {audit.seats} seats
+                </strong>
+                <span>Cutaway view · {room.width * room.depth} m²</span>
               </div>
               <ViewportHUD
                 view={view}
@@ -169,13 +202,20 @@ export default function App() {
                   onChange={(e) => setHeat(e.target.value as typeof heat)}
                 >
                   <option value="off">Off</option>
+                  <option value="visual">Visual seat limits (planning)</option>
                   <option value="spl">Direct SPL estimate</option>
                   <option value="intelligibility">
                     Intelligibility proxy (not STI)
                   </option>
                 </select>
               </label>
-              {heat !== "off" && (
+              {heat === "visual" && (
+                <span className="heat-legend">
+                  Green: within · Yellow: near limit · Red: review · Gray: no
+                  display
+                </span>
+              )}
+              {heat !== "off" && heat !== "visual" && (
                 <span className="heat-legend">
                   {heat === "spl" ? "40 dB" : "0.0"} <i />{" "}
                   {heat === "spl" ? "90 dB" : "1.0"} · gray = unknown
@@ -195,8 +235,8 @@ export default function App() {
                 e.preventDefault();
                 const kind = e.dataTransfer.getData(
                   "application/simstage-device",
-                ) as DeviceKind;
-                const item = CATALOG.find((i) => i.kind === kind);
+                );
+                const item = HARDWARE_CATALOG.find((i) => i.id === kind);
                 if (item) {
                   const point = canvas.current?.placementPoint(
                     e.clientX,
@@ -230,7 +270,7 @@ export default function App() {
           <p className="eyebrow">LIVE ENGINEERING</p>
           <h2>Design health</h2>
           <EngineeringPanel store={store} audit={audit} />
-          <PropertyInspector store={store} room={ROOM} />
+          <PropertyInspector store={store} room={room} />
           <p className="session-note">
             Concept layout only. Reloading clears changes. Spatial routes are
             straight-line estimates, not installation cable schedules.
