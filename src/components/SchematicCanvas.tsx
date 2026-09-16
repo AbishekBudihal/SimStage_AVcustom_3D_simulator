@@ -120,7 +120,7 @@ export function SchematicCanvas({ store }: { store: DeviceStore }) {
         {error ||
           (pending
             ? `Connect ${pending.portId} to a compatible input. Esc cancels.`
-            : `${state.connections.length} connections · HDMI / Dante / USB-C / Power`)}
+            : `${state.connections.length} physical connections · protocol and PoE checks excluded`)}
       </div>
       <svg
         ref={svg}
@@ -286,7 +286,14 @@ export function SchematicCanvas({ store }: { store: DeviceStore }) {
                       }}
                       onClick={() => {
                         setError("");
-                        if (!input) {
+                        if (
+                          !input &&
+                          !(
+                            p.direction === "bidirectional" &&
+                            pending &&
+                            pending.deviceId !== d.id
+                          )
+                        ) {
                           setPending({ deviceId: d.id, portId: p.id });
                           return;
                         }
@@ -304,6 +311,10 @@ export function SchematicCanvas({ store }: { store: DeviceStore }) {
                         }
                       }}
                     >
+                      <title>
+                        {p.connector ?? p.signal}
+                        {p.notes ? `: ${p.notes}` : ""}
+                      </title>
                       <circle cx={x} cy={y} r="10" fill="transparent" />
                       <circle
                         cx={x}

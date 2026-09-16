@@ -75,11 +75,9 @@ export function EngineeringPanel({
           <select
             value={settings.viewingRatio}
             onChange={(e) =>
-              store.api
-                .getState()
-                .setEngineering({
-                  viewingRatio: Number(e.target.value) as 4 | 6 | 8,
-                })
+              store.api.getState().setEngineering({
+                viewingRatio: Number(e.target.value) as 4 | 6 | 8,
+              })
             }
           >
             {[4, 6, 8].map((n) => (
@@ -101,16 +99,20 @@ export function EngineeringPanel({
           onClick={() => {
             store.api.getState().setEngineering({ noiseDb: 40, rt60: 0.6 });
             for (const device of store.snapshot())
-              if (device.kind === "speaker")
+              if (
+                device.kind === "speaker" &&
+                device.metadata.sensitivityDb === undefined
+              )
                 store.update(device.id, { metadata: { splAt1m: 78 } });
           }}
         >
           Use illustrative acoustic inputs
         </button>
         <p className="muted fine-print">
-          Preset: 78 dB at 1 m, 40 dB noise, RT60 0.6 s. Replace with measured
-          values. SPL assumes omnidirectional free-field sources; maps exclude
-          reflections and obstacles.
+          Preset: 40 dB noise, RT60 0.6 s; generic speakers only: 78 dB at 1 m.
+          Manufacturer speakers retain sensitivity and drive power. Free-field
+          SPL uses an approximate polar curve; reflections, obstacles and
+          amplifier verification are excluded.
         </p>
       </details>
       <ul className="audit-warnings">
@@ -128,7 +130,9 @@ export function EngineeringPanel({
                 {!s.results.length
                   ? "No display"
                   : s.results.some((r) => r.pass)
-                    ? "Within planning limits"
+                    ? s.results.some((r) => r.status === "green")
+                      ? "Within planning limits"
+                      : "Near planning limit"
                     : "Review"}
               </span>
               {s.results.map((r) => (

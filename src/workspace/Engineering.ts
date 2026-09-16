@@ -48,16 +48,58 @@ export function visualCheck(
     distance <= Math.min(heuristicMax, bdmMax) &&
     horizontal <= settings.horizontalLimit &&
     vertical <= settings.verticalLimit;
-  return { distance, horizontal, vertical, heuristicMax, bdmMax, pass };
+  const margin = Math.max(
+    distance / Math.min(heuristicMax, bdmMax),
+    horizontal / settings.horizontalLimit,
+    vertical / settings.verticalLimit,
+  );
+  const status: "green" | "yellow" | "red" = !pass
+    ? "red"
+    : margin >= 0.9
+      ? "yellow"
+      : "green";
+  return { distance, horizontal, vertical, heuristicMax, bdmMax, pass, status };
 }
-/** Incoherent free-field energy sum, specified on-axis SPL at 1m, no room gain/directivity. */
+/** Free-field energy sum with optional sensitivity/drive and approximate conical directivity. */
 export function directSpl(
   speakers: readonly PlacedDevice[],
   point: XYZ,
 ): number | null {
   let energy = 0;
   for (const speaker of speakers) {
-    if (speaker.metadata.splAt1m == null) continue;
+    const m = speaker.metadata;
+    let reference = m.splAt1m;
+    if (m.sensitivityDb !== undefined && m.speakerWatts !== undefined) {
+      if (m.speakerWatts === 0) continue;
+      reference = Math.min(
+        m.maxSpl ?? Infinity,
+        m.sensitivityDb + 10 * Math.log10(m.speakerWatts),
+      );
+    }
+    if (reference == null) continue;
+    let attenuation = 0;
+    if (m.coverageDegrees !== undefined) {
+      const forward = new T.Vector3(0, 0, 1);
+      if (speaker.surface === "ceiling") forward.set(0, -1, 0);
+      else
+        forward.applyAxisAngle(
+          new T.Vector3(0, 1, 0),
+          surfaceYaw(speaker.surface),
+        );
+      forward.applyEuler(
+        new T.Euler(speaker.rotation.x, speaker.rotation.y, speaker.rotation.z),
+      );
+      const direction = new T.Vector3(
+        point.x - speaker.position.x,
+        point.y - speaker.position.y,
+        point.z - speaker.position.z,
+      );
+      const angle = direction.lengthSq()
+        ? forward.angleTo(direction) * radToDeg
+        : 0;
+      // Smooth planning polar: -6 dB at the published half-coverage angle; no measured polar data.
+      attenuation = Math.min(30, 6 * (angle / (m.coverageDegrees / 2)) ** 2);
+    }
     const distance = Math.max(
       1,
       Math.hypot(
@@ -67,7 +109,7 @@ export function directSpl(
       ),
     );
     energy +=
-      10 ** ((speaker.metadata.splAt1m - 20 * Math.log10(distance)) / 10);
+      10 ** ((reference - attenuation - 20 * Math.log10(distance)) / 10);
   }
   return energy > 0 ? 10 * Math.log10(energy) : null;
 }
@@ -145,9 +187,19 @@ export function engineeringAudit(state: DeviceState, room: RoomSize) {
     warnings.push(
       `Back row: ${Math.min(...back.results.map((r) => r.distance)).toFixed(2)} m to nearest display; increase image height or reduce distance.`,
     );
-  if (!speakers.length || speakers.some((s) => s.metadata.splAt1m == null))
+  const hasReference = (s: PlacedDevice) =>
+    s.metadata.splAt1m != null ||
+    (s.metadata.sensitivityDb !== undefined &&
+      s.metadata.speakerWatts !== undefined);
+  if (!speakers.length || speakers.some((s) => !hasReference(s)))
     warnings.push(
       "Acoustic: missing speaker reference SPL; map is incomplete.",
+    );
+  if (speakers.some((s) => s.metadata.speakerWatts === 0))
+    warnings.push("Acoustic: a speaker has zero drive power (muted).");
+  if (speakers.some((s) => s.metadata.sensitivityDb !== undefined))
+    warnings.push(
+      "Acoustic: drive power is an assumption; amplifier routing, headroom and transformer taps are not verified.",
     );
   if (levels.some((level) => level < state.engineering.targetSpl))
     warnings.push(
@@ -189,7 +241,8 @@ export function engineeringAudit(state: DeviceState, room: RoomSize) {
   const checks = [
     displays.length > 0 && !failures.length,
     speakers.length > 0 &&
-      speakers.every((s) => s.metadata.splAt1m != null) &&
+      speakers.every(hasReference) &&
+      levels.length === seats.length &&
       levels.every((l) => l >= state.engineering.targetSpl),
     devices.length > 0 &&
       !bom.incomplete &&

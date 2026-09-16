@@ -6,6 +6,7 @@ import {
   type MountSurface,
 } from "../workspace/DeviceStore";
 import { allowedSurfaces } from "../workspace/Catalog";
+import { HARDWARE_CATALOG } from "../workspace/HardwareCatalog";
 const button =
   "rounded-md border border-solid border-slate-600 bg-slate-800 px-3 py-2 text-xs text-slate-200 hover:bg-slate-700";
 export function PropertyInspector({
@@ -27,6 +28,7 @@ export function PropertyInspector({
         </p>
       </section>
     );
+  const profile = HARDWARE_CATALOG.find((p) => p.id === selected.catalogId);
   const wall = !["floor", "ceiling", "table"].includes(selected.surface);
   const degrees = ((((selected.rotation.y * 180) / Math.PI) % 360) + 360) % 360;
   const shift = (delta: number) =>
@@ -46,6 +48,62 @@ export function PropertyInspector({
       <h3>Device inspector</h3>
       <strong className="text-sm">{selected.metadata.label}</strong>
       <p className="text-xs text-slate-400">{selected.surface} mount</p>
+      {profile && (
+        <details className="engineering-settings">
+          <summary>Hardware specifications & sources</summary>
+          <p className="muted fine-print">
+            W / H / D:{" "}
+            {Object.values(profile.dimensions)
+              .map((n) => (n * 1000).toFixed(2))
+              .join(" / ")}{" "}
+            mm
+          </p>
+          <p className="muted fine-print">
+            Power: {selected.metadata.powerBasis}
+          </p>
+          <p className="muted fine-print">
+            Heat: {selected.metadata.heatBasis}
+          </p>
+          <p className="muted fine-print">{profile.notes}</p>
+          {profile.sources.map((source, i) => (
+            <p key={source}>
+              <a
+                className="text-xs text-sky-300"
+                href={source}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Manufacturer reference {i + 1}
+              </a>
+            </p>
+          ))}
+        </details>
+      )}
+      {selected.metadata.sensitivityDb !== undefined && (
+        <label className="engineering-input">
+          <span>Amplifier drive (W, 8 ohm bypass)</span>
+          <input
+            aria-label="Amplifier drive watts"
+            type="number"
+            min="0"
+            max={selected.metadata.maxSpeakerWatts}
+            step="0.1"
+            value={selected.metadata.speakerWatts ?? 1}
+            onChange={(e) => {
+              const watts = Number(e.target.value);
+              if (
+                Number.isFinite(watts) &&
+                watts >= 0 &&
+                watts <= (selected.metadata.maxSpeakerWatts ?? Infinity)
+              )
+                store.update(selected.id, {
+                  metadata: { speakerWatts: watts },
+                });
+            }}
+          />
+        </label>
+      )}
+
       <label className="engineering-input">
         <span>Mounting surface</span>
         <select
@@ -118,7 +176,10 @@ export function PropertyInspector({
           "heatBtuPerHour",
           "rackUnits",
           ...(selected.kind === "display" ? ["imageHeightM"] : []),
-          ...(selected.kind === "speaker" ? ["splAt1m"] : []),
+          ...(selected.kind === "speaker" &&
+          selected.metadata.sensitivityDb === undefined
+            ? ["splAt1m"]
+            : []),
         ] as const
       ).map((key) => {
         const field = key as
@@ -156,7 +217,17 @@ export function PropertyInspector({
                     (field === "splAt1m" && value > 150))
                 )
                   return;
-                store.update(selected.id, { metadata: { [field]: value } });
+                store.update(selected.id, {
+                  metadata: {
+                    [field]: value,
+                    ...(field === "powerWatts"
+                      ? { powerBasis: "User override" }
+                      : {}),
+                    ...(field === "heatBtuPerHour"
+                      ? { heatBasis: "User override" }
+                      : {}),
+                  },
+                });
               }}
             />
           </label>

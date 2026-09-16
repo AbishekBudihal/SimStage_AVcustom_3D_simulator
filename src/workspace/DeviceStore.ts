@@ -1,5 +1,6 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { roomLayout } from "./RoomLayout";
+import { ROOM_PRESETS, type RoomPresetId } from "./RoomPresets";
 
 export type XYZ = Readonly<{ x: number; y: number; z: number }>;
 export type DeviceKind =
@@ -19,6 +20,8 @@ export interface DevicePort {
   readonly label: string;
   readonly signal: string;
   readonly direction: "input" | "output" | "bidirectional";
+  readonly connector?: string;
+  readonly notes?: string;
 }
 export interface DeviceMetadata {
   readonly label: string;
@@ -27,6 +30,13 @@ export interface DeviceMetadata {
   readonly rackUnits: number | null;
   readonly imageHeightM?: number;
   readonly splAt1m?: number | null;
+  readonly sensitivityDb?: number;
+  readonly speakerWatts?: number;
+  readonly maxSpeakerWatts?: number;
+  readonly coverageDegrees?: number;
+  readonly maxSpl?: number;
+  readonly powerBasis?: string;
+  readonly heatBasis?: string;
 }
 /** Metres, Y-up; position is the mounting anchor. Euler rotations use radians, XYZ order. */
 export interface PlacedDevice {
@@ -38,6 +48,7 @@ export interface PlacedDevice {
   readonly rotation: XYZ;
   readonly ports: readonly DevicePort[];
   readonly metadata: DeviceMetadata;
+  readonly dimensions?: XYZ;
 }
 export type NewDevice = Omit<PlacedDevice, "id"> & { readonly id?: string };
 export type DeviceUpdate = Partial<
@@ -51,6 +62,7 @@ export interface RoomSize {
   readonly width: number;
   readonly depth: number;
   readonly height: number;
+  readonly layout?: "huddle" | "conference" | "training";
 }
 export type DeviceChange = Readonly<{
   id: string;
@@ -78,6 +90,9 @@ export interface EngineeringSettings {
   readonly heatBudget: number;
 }
 export interface DeviceState {
+  readonly room: RoomSize;
+  readonly roomPreset: RoomPresetId;
+  setRoomPreset(id: RoomPresetId): void;
   readonly devices: Readonly<Record<string, PlacedDevice | undefined>>;
   readonly selectedId: string | null;
   readonly connections: readonly Connection[];
@@ -102,6 +117,34 @@ function finitePosition(position: XYZ): void {
 function freezeDevice(input: PlacedDevice): PlacedDevice {
   finitePosition(input.position);
   finitePosition(input.rotation);
+  if (
+    input.dimensions &&
+    !Object.values(input.dimensions).every((n) => Number.isFinite(n) && n > 0)
+  )
+    throw new Error("Dimensions must be positive");
+  for (const key of [
+    "sensitivityDb",
+    "speakerWatts",
+    "maxSpeakerWatts",
+    "coverageDegrees",
+    "maxSpl",
+  ] as const) {
+    const value = input.metadata[key];
+    if (value !== undefined && (!Number.isFinite(value) || value < 0))
+      throw new Error("Invalid speaker specification");
+  }
+  if (
+    input.metadata.speakerWatts !== undefined &&
+    input.metadata.maxSpeakerWatts !== undefined &&
+    input.metadata.speakerWatts > input.metadata.maxSpeakerWatts
+  )
+    throw new Error("Drive power exceeds loudspeaker rating");
+  if (
+    input.metadata.coverageDegrees !== undefined &&
+    (input.metadata.coverageDegrees <= 0 ||
+      input.metadata.coverageDegrees > 360)
+  )
+    throw new Error("Invalid coverage angle");
   if (
     input.metadata.imageHeightM !== undefined &&
     (!Number.isFinite(input.metadata.imageHeightM) ||
@@ -135,6 +178,9 @@ function freezeDevice(input: PlacedDevice): PlacedDevice {
     rotation: Object.freeze({ ...input.rotation }),
     ports: Object.freeze(input.ports.map((port) => Object.freeze({ ...port }))),
     metadata: Object.freeze({ ...input.metadata }),
+    ...(input.dimensions
+      ? { dimensions: Object.freeze({ ...input.dimensions }) }
+      : {}),
   });
 }
 const owns = (devices: DeviceState["devices"], id: string): boolean =>
@@ -145,6 +191,35 @@ const sameXYZ = (a: XYZ, b: XYZ): boolean =>
 /** Independent Zustand store per workspace; vanilla API needs no React runtime. */
 export function createDeviceStore(): StoreApi<DeviceState> {
   return createStore<DeviceState>()((set, get) => ({
+    room: ROOM_PRESETS.boardroom.room,
+    roomPreset: "boardroom",
+    setRoomPreset(id) {
+      if (!Object.prototype.hasOwnProperty.call(ROOM_PRESETS, id))
+        throw new Error("Unknown room preset");
+      const state = get();
+      if (state.roomPreset === id) return;
+      const room = ROOM_PRESETS[id].room;
+      const devices = Object.fromEntries(
+        Object.entries(state.devices).map(([key, device]) => [
+          key,
+          device
+            ? freezeDevice({
+                ...device,
+                position: snapToSurface(
+                  {
+                    x: (device.position.x * room.width) / state.room.width,
+                    y: (device.position.y * room.height) / state.room.height,
+                    z: (device.position.z * room.depth) / state.room.depth,
+                  },
+                  device.surface,
+                  room,
+                ),
+              })
+            : undefined,
+        ]),
+      );
+      set({ room, roomPreset: id, devices: Object.freeze(devices) });
+    },
     devices: Object.freeze({}),
     selectedId: null,
     connections: Object.freeze([]),
@@ -202,19 +277,16 @@ export function createDeviceStore(): StoreApi<DeviceState> {
         throw new Error(
           "Connect compatible output and input ports on different devices",
         );
-      if (
-        state.connections.some(
-          (c) => c.to.deviceId === to.deviceId && c.to.portId === to.portId,
-        )
-      )
-        throw new Error("This input is already connected");
-      if (
-        source.signal !== "Dante" &&
+      const occupied = (endpoint: Endpoint) =>
         state.connections.some(
           (c) =>
-            c.from.deviceId === from.deviceId && c.from.portId === from.portId,
-        )
-      )
+            (c.from.deviceId === endpoint.deviceId &&
+              c.from.portId === endpoint.portId) ||
+            (c.to.deviceId === endpoint.deviceId &&
+              c.to.portId === endpoint.portId),
+        );
+      if (occupied(to)) throw new Error("This input is already connected");
+      if ((source.connector || source.signal !== "Dante") && occupied(from))
         throw new Error("This point-to-point output is already connected");
       const id = crypto.randomUUID();
       set({
@@ -256,13 +328,24 @@ export function createDeviceStore(): StoreApi<DeviceState> {
       if (!id.trim() || owns(get().devices, id))
         throw new Error("Device ID must be nonempty and unique");
       const device = freezeDevice({ ...input, id });
+      const existing = Object.values(get().devices).filter(
+        (d): d is PlacedDevice => !!d,
+      );
+      let nodeY = 50;
+      for (let start = 0; start + 3 <= existing.length; start += 3)
+        nodeY +=
+          Math.max(
+            ...existing
+              .slice(start, start + 3)
+              .map((d) => 90 + d.ports.length * 24),
+          ) + 80;
       set((state) => ({
         devices: Object.freeze({ ...state.devices, [id]: device }),
         nodePositions: Object.freeze({
           ...state.nodePositions,
           [id]: Object.freeze({
             x: 50 + (Object.keys(state.devices).length % 3) * 340,
-            y: 50 + Math.floor(Object.keys(state.devices).length / 3) * 360,
+            y: nodeY,
           }),
         }),
       }));
@@ -286,6 +369,7 @@ export function createDeviceStore(): StoreApi<DeviceState> {
         previous.catalogId === device.catalogId &&
         previous.kind === device.kind &&
         previous.surface === device.surface &&
+        JSON.stringify(previous.metadata) === JSON.stringify(device.metadata) &&
         previous.metadata.label === device.metadata.label &&
         previous.metadata.powerWatts === device.metadata.powerWatts &&
         previous.metadata.heatBtuPerHour === device.metadata.heatBtuPerHour &&
@@ -409,11 +493,16 @@ export function snapToSurface(
       Math.max(Math.ceil(min / step), Math.round(v / step)),
     ) * step;
   if (surface === "table") {
-    const table = roomLayout(room);
+    const table = roomLayout(room).tables.reduce((best, current) =>
+      Math.hypot(point.x - current.x, point.z - current.z) <
+      Math.hypot(point.x - best.x, point.z - best.z)
+        ? current
+        : best,
+    );
     return {
-      x: snap(point.x, -table.tableWidth / 2, table.tableWidth / 2),
-      y: table.tableHeight,
-      z: snap(point.z, -table.tableDepth / 2, table.tableDepth / 2),
+      x: snap(point.x, table.x - table.width / 2, table.x + table.width / 2),
+      y: table.height,
+      z: snap(point.z, table.z - table.depth / 2, table.z + table.depth / 2),
     };
   }
   return {

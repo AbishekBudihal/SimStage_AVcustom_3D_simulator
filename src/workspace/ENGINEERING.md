@@ -35,10 +35,10 @@ Source: https://www.avixa.org/resources/display-image-size-calculators/learn-mor
 
 Direct sound: `L(r) = L(1m) − 20 log10(max(1m, r))`. Multiple specified sources
 are summed by incoherent energy (`10 log10(sum(10^(L/10)))`). This assumes
-omnidirectional sources, no obstacles/reflections and no phase interference.
+no obstacles/reflections and no phase interference. Generic references are omnidirectional. Manufacturer loudspeakers use sensitivity + 10 log10(drive Watts), capped at published continuous SPL, then an approximate conical attenuation of min(30, 6 × (off-axis / half-coverage-angle)^2) dB. This smooth curve is an assumption, not measured polar data. Zero drive contributes no sound.
 Distances below 1 m are clamped because this far-field approximation should not
 extrapolate near-field gain. Reference SPL is the operating level at 1 m, not a
-speaker's rated electrical power or sensitivity alone. Heatmap values are
+speaker's rated electrical power or sensitivity alone. Drive power is separate from mains power and does not imply a connected amplifier. Heatmap values are
 calculated at 1.2 m ear height and projected onto the floor for visualization.
 Unknown speaker levels yield partial coverage, explicitly flagged in the audit.
 
@@ -66,12 +66,11 @@ thermal load within budget, and no unconnected inputs. Unused optional inputs ca
 therefore reduce readiness. This transparent score is not an AVIXA health score.
 
 Port compatibility matches signal type and direction, prevents multiple sources
-on one input, and treats non-Dante outputs as point-to-point. It does not negotiate
+on one input, and treats physical connectors as point-to-point in either direction. Generic logical Dante ports retain their earlier fanout behavior. It does not negotiate
 HDMI bandwidth/HDCP, USB roles, Dante channel counts, PoE or DSP processing.
 Wires persist by endpoint ID during spatial movement. Hover length is a straight-line
 minimum, excluding tray routes, slack and service loops. Schematics do not perform
-obstacle-avoiding routing. Devices use illustrative generic geometry/ports; verified
-manufacturer specifications are not bundled.
+obstacle-avoiding routing. Manufacturer envelopes are applied to procedural models; these are not manufacturer CAD assets. Hardware profiles include sources and distinguish physical jacks from logical channels. USB roles, adapters and network protocol interoperability still require engineering review.
 
 ## Validation and performance
 
@@ -82,3 +81,13 @@ frames; cached geometry and instanced overlays reduce allocation/draw calls.
 60 FPS remains hardware- and scene-dependent; no universal frame-rate guarantee.
 State is session-only. No cloud save, licensed certification or real-time acoustic
 measurement is implied by this implementation.
+
+## Manufacturer hardware and presets
+
+`HardwareCatalog.ts` contains seven source-linked regional profiles: Samsung QM75C/QM85C, Shure MXA920-S US 24-inch, Q-SYS Core 8 Flex, Biamp TesiraFORTE X 400, Sony SRG-X400 and QSC AD-S6T. Dimensions follow each cited manufacturer sheet; Sony labels its dimensions approximate. Sources are available from each selected device's inspector. Unspecified connector subtypes are not invented. Specifications reviewed September 2026.
+
+Power labels preserve published on-mode, typical, maximum and upper-bound conditions. Heat derived from Watts uses 3.412142 BTU/h per Watt and is not measured thermal output. Biamp's <150 W includes exported PoE: simply summing it with downstream devices is conservative and may double-count. The passive QSC speaker adds no separate mains load; amplifier mains demand is not included. This is a planning BOM, not a circuit or HVAC design guarantee. User edits are labeled as overrides.
+
+Room presets are authoritative Zustand state: Huddle 4 x 3 x 2.7 m / 4 seats, Boardroom 8 x 6 x 3 m / 7 seats, Training 14 x 8 x 3.5 m / 24 seats and 12 tables. Switching scales mounting anchors then snaps them to the new surfaces, in one update. Device IDs, selection and graph endpoints persist. No collision or physical edge-clearance solver is implied.
+
+The visual overlay uses instanced rings at seat coordinates: green within all checks, yellow when any limit is at least 90% utilized, red outside any limit, gray when no display exists. With multiple displays the best result is shown. Image-height overrides alter planning criteria; hardware envelope dimensions stay tied to the selected model. Room changes rebuild only room resources; overlays and device transforms update through the existing renderer.

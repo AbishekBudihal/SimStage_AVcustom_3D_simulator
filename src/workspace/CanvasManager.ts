@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { SpatialAssets } from "./SpatialAssets";
-import type { FieldPoint } from "./Engineering";
+import type { FieldPoint, Audit } from "./Engineering";
 import {
   snapToSurface,
   type PlacedDevice,
@@ -35,14 +35,21 @@ export class CanvasManager {
   }
   readonly renderer: THREE.WebGLRenderer;
   readonly pickTargets: THREE.Object3D[] = [];
-  readonly room: RoomSize;
+  private currentRoom: RoomSize;
+  get room(): RoomSize {
+    return this.currentRoom;
+  }
+  private roomAssets = new SpatialAssets();
+  private roomGroup: THREE.Group;
+  private view: WorkspaceView = "isometric";
+  private visualOverlay: THREE.InstancedMesh | undefined;
   private readonly meshes = new Map<string, THREE.Mesh>();
   private readonly assets = new SpatialAssets();
   private heatmap: THREE.InstancedMesh | undefined;
   private heatMode: "off" | "spl" | "intelligibility" = "off";
   private field: readonly FieldPoint[] = [];
 
-  private readonly grid: THREE.GridHelper;
+  private grid: THREE.GridHelper;
   private readonly observer: ResizeObserver;
   private readonly records = new Map<string, PlacedDevice>();
   private readonly raycaster = new THREE.Raycaster();
@@ -53,7 +60,7 @@ export class CanvasManager {
   private transition:
     { start: number; from: THREE.Vector3; to: THREE.Vector3 } | undefined;
   private readonly target = new THREE.Vector3();
-  private readonly distance: number;
+  private distance: number;
 
   constructor(
     readonly host: HTMLElement,
@@ -61,7 +68,7 @@ export class CanvasManager {
   ) {
     const room = options.room ?? { width: 8, depth: 6, height: 3 };
     snapToSurface({ x: 0, y: 0, z: 0 }, "floor", room);
-    this.room = Object.freeze({ ...room });
+    this.currentRoom = room;
     this.distance = Math.max(room.width, room.depth, room.height) * 2;
     this.camera.far = Math.max(1000, this.distance * 10);
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
@@ -80,12 +87,92 @@ export class CanvasManager {
     this.grid.position.y = 0.033;
     this.grid.visible = false;
     this.scene.add(this.grid);
-    this.scene.add(this.assets.room(room));
+    this.roomGroup = this.roomAssets.room(room);
+    this.scene.add(this.roomGroup);
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(host);
     this.renderer.domElement.addEventListener("pointerdown", this.select);
     this.setView("isometric", false);
     this.resize();
+  }
+
+  /** Rebuild only room resources; preserve renderer, cameras and device identities. */
+  setRoom(room: RoomSize): void {
+    if (this.disposed || this.currentRoom === room) return;
+    snapToSurface({ x: 0, y: 0, z: 0 }, "floor", room);
+    this.scene.remove(this.roomGroup, this.grid);
+    this.roomAssets.dispose();
+    this.grid.geometry.dispose();
+    (Array.isArray(this.grid.material)
+      ? this.grid.material
+      : [this.grid.material]
+    ).forEach((m) => m.dispose());
+    this.currentRoom = room;
+    this.roomAssets = new SpatialAssets();
+    this.roomGroup = this.roomAssets.room(room);
+    const size = Math.ceil(Math.max(room.width, room.depth));
+    this.grid = new THREE.GridHelper(size, size * 2, 0x526075, 0x29313e);
+    this.grid.position.y = 0.033;
+    this.scene.add(this.roomGroup, this.grid);
+    this.distance = Math.max(room.width, room.depth, room.height) * 2;
+    this.setView(this.view, false);
+    this.resize();
+  }
+
+  setVisualOverlay(visible: boolean, seats: Audit["visual"]): void {
+    if (this.disposed) return;
+    if (this.visualOverlay && this.visualOverlay.count !== seats.length) {
+      this.scene.remove(this.visualOverlay);
+      this.visualOverlay.geometry.dispose();
+      (this.visualOverlay.material as THREE.Material).dispose();
+      this.visualOverlay = undefined;
+    }
+    if (!visible) {
+      if (this.visualOverlay) this.visualOverlay.visible = false;
+      this.invalidate();
+      return;
+    }
+    if (!this.visualOverlay) {
+      this.visualOverlay = new THREE.InstancedMesh(
+        new THREE.RingGeometry(0.29, 0.42, 32),
+        new THREE.MeshBasicMaterial({
+          side: THREE.DoubleSide,
+          depthWrite: false,
+          transparent: true,
+          opacity: 0.95,
+        }),
+        seats.length,
+      );
+      this.visualOverlay.name = "Visual planning seat markers";
+      this.scene.add(this.visualOverlay);
+    }
+    this.visualOverlay.visible = true;
+    const object = new THREE.Object3D(),
+      color = new THREE.Color();
+    seats.forEach((seat, i) => {
+      const status = seat.results.some((r) => r.status === "green")
+        ? "green"
+        : seat.results.some((r) => r.pass)
+          ? "yellow"
+          : seat.results.length
+            ? "red"
+            : "unknown";
+      color.setHex(
+        { green: 0x26d99a, yellow: 0xffc857, red: 0xf45363, unknown: 0x718096 }[
+          status
+        ],
+      );
+      object.position.set(seat.position.x, 0.06, seat.position.z);
+      object.rotation.x = -Math.PI / 2;
+      object.updateMatrix();
+      this.visualOverlay!.setMatrixAt(i, object.matrix);
+      this.visualOverlay!.setColorAt(i, color);
+    });
+    this.visualOverlay.instanceMatrix.needsUpdate = true;
+    if (this.visualOverlay.instanceColor)
+      this.visualOverlay.instanceColor.needsUpdate = true;
+    this.visualOverlay.computeBoundingSphere();
+    this.invalidate();
   }
 
   /** Updates only changed meshes; multiple changes share one scheduled GPU frame. */
@@ -242,6 +329,7 @@ export class CanvasManager {
           );
         this.heatmap!.setColorAt(index, color);
       });
+      this.heatmap.computeBoundingSphere();
       this.heatmap.instanceMatrix.needsUpdate = true;
       if (this.heatmap.instanceColor)
         this.heatmap.instanceColor.needsUpdate = true;
@@ -251,6 +339,7 @@ export class CanvasManager {
   setView(view: WorkspaceView, animate = true): void {
     if (this.disposed) return;
     this.transition = undefined;
+    this.view = view;
     if (view === "seat") {
       this.grid.visible = false;
       this.activeCamera = this.seatCamera;
@@ -323,7 +412,8 @@ export class CanvasManager {
     if (
       mesh &&
       device &&
-      mesh.userData.shapeKey !== `${device.kind}:${device.surface}`
+      mesh.userData.shapeKey !==
+        `${device.kind}:${device.surface}:${device.catalogId}`
     ) {
       this.scene.remove(mesh);
       this.pickTargets.splice(this.pickTargets.indexOf(mesh), 1);
@@ -338,7 +428,7 @@ export class CanvasManager {
       }
     } else {
       if (!mesh) {
-        const key = `${device.kind}:${device.surface}`;
+        const key = `${device.kind}:${device.surface}:${device.catalogId}`;
         mesh = this.assets.device(device);
         mesh.material = this.material(device.kind, id === this.selectedId);
         mesh.userData.deviceId = id;
@@ -359,7 +449,7 @@ export class CanvasManager {
         "XYZ",
       );
       const size =
-        device.kind === "display"
+        device.kind === "display" && !device.dimensions
           ? (device.metadata.imageHeightM ?? 0.8) / 0.8
           : 1;
       mesh.scale.setScalar(size);
@@ -376,6 +466,11 @@ export class CanvasManager {
     this.renderer.domElement.removeEventListener("pointerdown", this.select);
     this.observer.disconnect();
     this.assets.dispose();
+    this.roomAssets.dispose();
+    if (this.visualOverlay) {
+      this.visualOverlay.geometry.dispose();
+      (this.visualOverlay.material as THREE.Material).dispose();
+    }
     if (this.heatmap) {
       this.heatmap.geometry.dispose();
       (this.heatmap.material as THREE.Material).dispose();
