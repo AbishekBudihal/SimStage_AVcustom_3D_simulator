@@ -99,3 +99,24 @@ the north wall; no walk navigation). `BOMDrawer` groups by catalog and device ki
 updates with store edits, and separately flags unknown power/heat values. Load
 sums represent known values, not a validated electrical or thermal design.
 Tailwind utilities are compiled locally through PostCSS; no runtime styling CDN.
+
+
+## Interactive viewport
+
+Left-drag empty space to orbit; middle/right-drag to pan; wheel to zoom the camera
+projection. Device grabs retain surface dragging, snapping and Escape rollback.
+Double-click a device or choose Focus selected to frame it. Home resets isometric;
+Fit room and plan/front/seat presets use the same renderer. Eight projected room
+corners determine framing; resize updates the drawing buffer at DPR capped to 2.
+Navigation damping schedules frames only while changing. Polar and zoom limits
+reduce floor clipping; this is an inspection camera, not a collision-aware walk mode.
+
+Measurements are live room dimensions. Cable Map draws only DeviceStore connections,
+filters by their signal categories, and exposes endpoints, port IDs and route length.
+Routes are estimated overhead orthogonal paths between mounting anchors, not physical
+port locations, cable tray solutions or installation lengths (no slack allowance).
+Camera guides require catalog horizontal FOV; missing vertical FOV renders only a
+horizontal triangle, with a six-metre preview depth rather than a rated range.
+Microphone guides require a catalog pickup radius; polar response/STI is not inferred.
+Speaker and display modes reuse active engineering calculations and unknown-data flags.
+All overlays remain planning estimates, not certified AVIXA compliance.

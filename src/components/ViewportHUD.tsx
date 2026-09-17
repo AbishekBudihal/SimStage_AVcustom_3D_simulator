@@ -18,6 +18,7 @@ export function ViewportHUD({
         [
           ["plan", "2D Plan"],
           ["isometric", "3D Isometric"],
+          ["front", "Front"],
           ["seat", "Seat View"],
         ] as const
       ).map(([mode, label]) => (
@@ -27,7 +28,7 @@ export function ViewportHUD({
           aria-pressed={view === mode}
           title={
             mode === "seat"
-              ? "Fixed seated-eye perspective at 1.2 m, facing the front wall"
+              ? "Start at seated-eye perspective at 1.2 m, facing the front wall"
               : label
           }
           onClick={() => onChange(mode)}

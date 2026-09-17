@@ -13,9 +13,11 @@ export function CatalogLibrary({
   const catalog = useStore(store.api, (s) => s.catalog);
   const [query, setQuery] = useState(""),
     [placeholders, setPlaceholders] = useState(false),
+    [category, setCategory] = useState("All"),
     [message, setMessage] = useState("");
   const products = catalog.filter(
     (p) =>
+      (category === "All" || p.category === category) &&
       (placeholders || p.provenance !== "user_defined") &&
       `${p.manufacturer} ${p.model} ${p.category}`
         .toLowerCase()
@@ -28,6 +30,27 @@ export function CatalogLibrary({
         {catalog.length} source records. Imported estimates retain their
         original provenance; missing specifications stay unknown.
       </p>
+      <label className="engineering-input">
+        <span>AV category</span>
+        <select
+          aria-label="AV category"
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+        >
+          <option>All</option>
+          {[...new Set(catalog.map((p) => p.category))].sort().map((c) => (
+            <option key={c} value={c}>
+              {c === "matrix" || c === "switcher"
+                ? "Switchers / Matrices"
+                : c === "extender"
+                  ? "Extenders / Converters"
+                  : c === "dsp"
+                    ? "DSP"
+                    : c[0].toUpperCase() + c.slice(1)}
+            </option>
+          ))}
+        </select>
+      </label>
       <label className="engineering-input">
         <span>Search hardware</span>
         <input
