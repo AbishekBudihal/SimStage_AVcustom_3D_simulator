@@ -138,6 +138,10 @@ export class SpatialAssets {
     root.userData.baseColor = 0x263343;
     root.traverse((object) => {
       object.userData.deviceId = device.id;
+      if (object instanceof T.Mesh) {
+        object.castShadow = true;
+        object.receiveShadow = true;
+      }
     });
     return root;
   }
@@ -150,7 +154,7 @@ export class SpatialAssets {
     group.add(this.box(w, h, 0.12, 0xd3d7d7, 0, h / 2, -d / 2 - 0.06));
     group.add(this.box(0.12, h, d, 0x9aa8ad, -w / 2 - 0.06, h / 2, 0));
     group.add(this.box(w, 0.09, 0.04, 0x8a989e, 0, 0.045, -d / 2 + 0.025));
-    for (let i = 0; i < 5; i++)
+    for (let i = 0; i < Math.max(1, Math.floor((w - 0.8) / 0.7)); i++)
       group.add(
         this.box(
           0.55,
@@ -174,10 +178,50 @@ export class SpatialAssets {
           ((i - 1) * d) / 3.5,
         ),
       );
+    // Downward-facing ceiling: visible from inside, open from the overview.
+    const ceiling = this.box(w, 0.035, d, 0xe3e7e5, 0, h + 0.025, 0);
+    const ceilingMaterial = this.material(0xe3e7e5);
+    // Hide only the upper face by using a downward-facing plane.
+    const ceilingKey = `ceiling:${w}:${d}`;
+    let ceilingGeometry = this.geometries.get(ceilingKey);
+    if (!ceilingGeometry) {
+      ceilingGeometry = new T.PlaneGeometry(w, d);
+      ceilingGeometry.rotateX(Math.PI / 2);
+      this.geometries.set(ceilingKey, ceilingGeometry);
+    }
+    ceiling.geometry = ceilingGeometry;
+    ceiling.material = ceilingMaterial;
+    ceiling.name = "Ceiling";
+    group.add(ceiling);
+    const lightMaterial = this.material(0xf8f3df);
+    lightMaterial.emissive.setHex(0xffeac5);
+    lightMaterial.emissiveIntensity = 0.5;
+    const nx = Math.max(1, Math.floor(w / 2.4)),
+      nz = Math.max(1, Math.floor(d / 2.4));
+    for (let x = 0; x < nx; x++)
+      for (let z = 0; z < nz; z++) {
+        const fixture = this.box(
+          0.6,
+          0.035,
+          0.6,
+          0xf8f3df,
+          -w / 2 + ((x + 0.5) * w) / nx,
+          h - 0.04,
+          -d / 2 + ((z + 0.5) * d) / nz,
+        );
+        fixture.name = "Office light";
+        group.add(fixture);
+      }
+    // Architectural seams scale with the room, not a texture of a fixed room.
+    for (let x = -w / 2 + 0.6; x < w / 2; x += 0.6)
+      group.add(this.box(0.008, 0.004, d, 0xaeb8b8, x, 0.013, 0));
+    const furniture = new T.Group();
+    furniture.name = "Furniture";
+    group.add(furniture);
     const layout = roomLayout(room);
     group.add(this.box(w * 0.85, 0.012, d * 0.83, 0x87979c, 0, 0.014, 0));
     for (const table of layout.tables) {
-      group.add(
+      furniture.add(
         this.box(
           table.width,
           0.09,
@@ -189,7 +233,7 @@ export class SpatialAssets {
         ),
       );
       for (const x of [-table.width * 0.3, table.width * 0.3])
-        group.add(
+        furniture.add(
           this.box(
             0.09,
             table.height - 0.09,
@@ -210,8 +254,14 @@ export class SpatialAssets {
       for (const x of [-0.18, 0.18])
         for (const z of [-0.18, 0.18])
           chair.add(this.box(0.025, 0.43, 0.025, 0x6a7983, x, 0.215, z));
-      group.add(chair);
+      furniture.add(chair);
     }
+    group.traverse((o) => {
+      if (o instanceof T.Mesh) {
+        o.receiveShadow = true;
+        o.castShadow = o.parent === furniture || o.parent?.parent === furniture;
+      }
+    });
     return group;
   }
   dispose() {

@@ -93,3 +93,20 @@ Import accepts arrays in the existing simulator schema, validates the entire bat
 Room dimensions initialize from `createDefaultRoom()` in the supplied RoomModel (10 x 7 x 3.2 m). Width/length accept 3–30 m and height 2–8 m. Valid edits update the room and mounting anchors atomically; walls and ceiling move, table anchors reclamp, and device IDs and wires persist. Conference seats use 0.85 m spacing. Training rows/columns use 3.6 x 1.6 m bays and perimeter clearance. These are furniture planning assumptions, not accessibility certification.
 
 Visual seat markers and cyan viewing-region boundaries use the same live image height, orientation, content and angle checks. Boundaries sample the region at 0.25 m on the 1.2 m seating plane and project it onto the floor; they are discrete planning contours, not certified DISCAS boundaries. Unknown image heights produce no region. SPL samples use live speaker coordinates and room dimensions. All placed devices contribute; selection only controls the inspector.
+
+
+## Capacity and semantic placement
+
+Room state now accepts `roomType` and optional `capacity` (0–200). Eight semantic types map to meeting-table or teaching-desk layouts. Capacity is a request: seating stops at the available geometric capacity and the audit reports any shortfall. Presets populate editable fields only. A missing capacity retains automatic sizing. These spacing rules are design assumptions, not circulation/accessibility certification.
+
+Products added by clicking inventory or by schematic import without XYZ receive an automatic placement intent: mainDisplayWall, aboveMainDisplay, ceilingGrid, table, frontWall or rearRoom. Room changes and device edits solve these intents in one store publication. Moving, rotating or remounting a device marks it manual. Manual transforms survive resizing, even if now outside the envelope; the audit flags those positions. The inspector can explicitly reapply automatic placement. Escape restores the previous drag placement mode.
+
+Schematic JSON import adds nodes from existing catalog IDs and validates all endpoints transactionally before publishing. Format:
+
+```json
+{"nodes":[{"id":"display","catalogId":"samsung-qm75b"},{"id":"camera","catalogId":"yealink-uvc86"}],"connections":[{"from":{"deviceId":"camera","portId":"hdmi-out"},"to":{"deviceId":"display","portId":"hdmi-1"}}]}
+```
+
+Optional node `position` and `rotation` use XYZ objects in metres and radians and preserve explicit engineer transforms. Arbitrary schematic drawing/PDF formats are not parsed. This path uses the active DeviceStore; no AppState synchronization layer or second persistent model exists. Rack-unit metadata and straight-line cable estimates remain available; rack allocation and installation cable routing have not been added.
+
+The procedural room includes a downward-facing ceiling (open from above), dimension-driven ceiling lights, floor seams, furniture groups and demand-rendered shadows. No static room model is loaded. There is no full collision solver or guarantee that equipment footprints cannot overlap.

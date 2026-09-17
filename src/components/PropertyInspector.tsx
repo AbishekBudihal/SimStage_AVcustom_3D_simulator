@@ -48,7 +48,22 @@ export function PropertyInspector({
     >
       <h3>Device inspector</h3>
       <strong className="text-sm">{selected.metadata.label}</strong>
-      <p className="text-xs text-slate-400">{selected.surface} mount</p>
+      <p className="text-xs text-slate-400">
+        {selected.surface} mount · {selected.placement?.mode ?? "manual"}{" "}
+        placement
+      </p>
+      {selected.placement && (
+        <button
+          className={button}
+          onClick={() =>
+            store.update(selected.id, {
+              placement: { ...selected.placement!, mode: "auto" },
+            })
+          }
+        >
+          Reapply {selected.placement.intent}
+        </button>
+      )}
       {profile && (
         <details className="engineering-settings">
           <summary>Hardware specifications & sources</summary>

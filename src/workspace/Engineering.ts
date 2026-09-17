@@ -242,6 +242,19 @@ export function engineeringAudit(state: DeviceState, room: RoomSize) {
     .filter((n): n is number => n !== null);
   const bom = summarizeBom(state.devices),
     warnings: string[] = [];
+  if (room.capacity !== undefined && seats.length < room.capacity)
+    warnings.push(
+      `Layout: ${seats.length} of ${room.capacity} requested seats fit; enlarge the room or reduce capacity.`,
+    );
+  for (const device of devices)
+    if (
+      Math.abs(device.position.x) > room.width / 2 ||
+      Math.abs(device.position.z) > room.depth / 2 ||
+      device.position.y > room.height
+    )
+      warnings.push(
+        `Placement: ${device.metadata.label} is outside the resized room; manual position preserved.`,
+      );
   if (!displays.length) warnings.push("Visual: no display placed.");
   else if (failures.length)
     warnings.push(

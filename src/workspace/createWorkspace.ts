@@ -4,25 +4,23 @@ import { createDefaultRoom } from "../room/RoomModel";
 export function createWorkspace() {
   const store = new DeviceStore();
   const source = createDefaultRoom();
-  store.api
-    .getState()
-    .setRoom({
-      width: source.width,
-      depth: source.depth,
-      height: source.height,
-      layout: "conference",
-    });
+  store.api.getState().setRoom({
+    width: source.width,
+    depth: source.depth,
+    height: source.height,
+    layout: "conference",
+  });
   const room = store.api.getState().room;
-  const add = (id: string, point: { x: number; y: number; z: number }) => {
+  const add = (id: string) => {
     const profile = store.api.getState().catalog.find((p) => p.id === id);
-    if (!profile) throw new Error(`Missing bundled catalog record: ${id}`);
-    return store.add(deviceFromProfile(profile, 0, room, point));
+    if (!profile) throw new Error(`Missing catalog record ${id}`);
+    return store.add(deviceFromProfile(profile, 0, room));
   };
-  const display = add("samsung-qm75b", { x: 0, y: 1.5, z: -room.depth / 2 });
-  const camera = add("yealink-uvc86", { x: 0, y: 1, z: -room.depth / 2 });
-  add("shure-mxa920", { x: 0, y: room.height, z: 0 });
-  add("qsc-adc6t", { x: 2, y: room.height, z: 0 });
-  add("biamp-tesiraforte-vt4", { x: 0.5, y: 0.75, z: 1 });
+  const display = add("samsung-qm75b"),
+    camera = add("yealink-uvc86");
+  add("shure-mxa920");
+  add("qsc-adc6t");
+  add("biamp-tesiraforte-vt4");
   store.api
     .getState()
     .connect(

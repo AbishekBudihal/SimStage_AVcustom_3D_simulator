@@ -86,6 +86,20 @@ export class CanvasManager {
     this.scene.add(new THREE.AmbientLight(0xffffff, 1.5));
     const light = new THREE.DirectionalLight(0xffffff, 2);
     light.position.set(4, 10, 6);
+    if (this.renderer.shadowMap) {
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    }
+    light.castShadow = true;
+    light.shadow.mapSize.set(1024, 1024);
+    Object.assign(light.shadow.camera, {
+      left: -20,
+      right: 20,
+      top: 20,
+      bottom: -20,
+      far: 80,
+    });
+    light.shadow.normalBias = 0.03;
     this.scene.add(light);
     // Even division count keeps the centre and every line on the 0.5 m lattice.
     const size = Math.ceil(Math.max(room.width, room.depth));

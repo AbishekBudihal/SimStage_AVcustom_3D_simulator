@@ -34,6 +34,7 @@ export function useDeviceDrag(
         moved: boolean;
         cursor: string;
         originalSurface: MountSurface;
+        originalPlacement: import("./DeviceStore").PlacedDevice["placement"];
       }
     | undefined;
 
@@ -105,6 +106,7 @@ export function useDeviceDrag(
       moved: false,
       cursor: element.style.cursor,
       originalSurface: device.surface,
+      originalPlacement: device.placement,
     };
     element.style.cursor = "grabbing";
     event.preventDefault();
@@ -203,6 +205,7 @@ export function useDeviceDrag(
         store.update(previous.id, {
           position: previous.origin,
           surface: previous.originalSurface,
+          placement: previous.originalPlacement,
         });
     } finally {
       if (element.hasPointerCapture(previous.pointerId))

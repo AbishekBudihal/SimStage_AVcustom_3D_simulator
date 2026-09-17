@@ -1,3 +1,4 @@
+import { defaultIntent } from "./PlacementSolver";
 import displays from "../../data/displays.json";
 import cameras from "../../data/cameras.json";
 import microphones from "../../data/microphones.json";
@@ -298,6 +299,10 @@ export function deviceFromProfile(
   point?: XYZ,
 ): NewDevice {
   return {
+    placement: {
+      mode: point ? "manual" : "auto",
+      intent: defaultIntent(profile.kind, profile.surface),
+    },
     catalogId: profile.id,
     kind: profile.kind,
     surface: profile.surface,

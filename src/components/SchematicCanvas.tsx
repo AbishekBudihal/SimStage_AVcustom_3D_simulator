@@ -1,3 +1,4 @@
+import { importSchematic } from "../workspace/SchematicImport";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { useStore } from "zustand";
 import type { DeviceStore, Endpoint } from "../workspace/DeviceStore";
@@ -86,6 +87,32 @@ export function SchematicCanvas({ store }: { store: DeviceStore }) {
   return (
     <div className="schematic-pane">
       <div className="schematic-controls">
+        <label>
+          Import schematic{" "}
+          <input
+            aria-label="Import schematic JSON"
+            type="file"
+            accept=".json,application/json"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (!file) return;
+              try {
+                if (file.size > 2000000)
+                  throw new Error("Schematic maximum size is 2 MB");
+                const count = importSchematic(
+                  store,
+                  JSON.parse(await file.text()),
+                );
+                setError(`Imported ${count} devices`);
+              } catch (error) {
+                setError(
+                  error instanceof Error ? error.message : "Import failed",
+                );
+              }
+            }}
+          />
+        </label>
         <span>
           Output → input · Drag nodes · Pan background · Wheel to zoom
         </span>

@@ -2,12 +2,12 @@
 
 Run `npm run dev`, `npm run build`, or `npm test` for the active application.
 
-- **Parametric room:** edit width, length and height to regenerate walls, tables, seating and overlays from the shared store.
+- **Parametric room:** edit dimensions, semantic room type and requested capacity to regenerate procedural architecture, tables, chairs and overlays. Automatic equipment follows placement intent; manual transforms remain intact.
 - **Simulator catalog:** 83 original JSON records with preserved dimensions, ports and provenance; searchable inventory and validated JSON imports. Missing electrical loads remain unknown.
 - **Spatial workspace:** architectural cutaway, conference table and seating,
   distinct procedural devices, Plan/Isometric/Seat views, inventory placement,
   table/wall/ceiling snapping and Alt-drag remounting with Escape rollback.
-- **Signal schematic:** synchronized port nodes, draggable node layout, pan/zoom,
+- **Signal schematic:** transactional catalog-based JSON imports, synchronized port nodes, draggable node layout, pan/zoom,
   compatible port connections, rounded orthogonal wiring and connection deletion.
 - **Planning audit:** seat-level viewing checks, direct SPL and optional broadband
   intelligibility-proxy maps, specified power/heat totals and project budget warnings.

@@ -1,5 +1,7 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { INITIAL_CATALOG, parseCatalog, type CatalogProfile } from "./catalog";
+import { solvePlacements, type Placement } from "./PlacementSolver";
+import { ROOM_TYPES, layoutForType, type RoomType } from "./RoomLayout";
 import { roomLayout } from "./RoomLayout";
 import { ROOM_PRESETS, type RoomPresetId } from "./RoomPresets";
 
@@ -58,16 +60,19 @@ export interface PlacedDevice {
   readonly ports: readonly DevicePort[];
   readonly metadata: DeviceMetadata;
   readonly dimensions?: XYZ;
+  readonly placement?: Placement;
 }
 export type NewDevice = Omit<PlacedDevice, "id"> & { readonly id?: string };
 export type DeviceUpdate = Partial<
-  Pick<PlacedDevice, "catalogId" | "kind" | "surface" | "ports">
+  Pick<PlacedDevice, "catalogId" | "kind" | "surface" | "ports" | "placement">
 > & {
   readonly position?: Partial<XYZ>;
   readonly rotation?: Partial<XYZ>;
   readonly metadata?: Partial<DeviceMetadata>;
 };
 export interface RoomSize {
+  readonly capacity?: number;
+  readonly roomType?: RoomType;
   readonly width: number;
   readonly depth: number;
   readonly height: number;
@@ -186,6 +191,9 @@ function freezeDevice(input: PlacedDevice): PlacedDevice {
   }
   return Object.freeze({
     ...input,
+    ...(input.placement
+      ? { placement: Object.freeze({ ...input.placement }) }
+      : {}),
     position: Object.freeze({ ...input.position }),
     rotation: Object.freeze({ ...input.rotation }),
     ports: Object.freeze(
@@ -225,9 +233,20 @@ export function createDeviceStore(): StoreApi<DeviceState> {
     },
     setRoom(update) {
       const state = get(),
-        room = Object.freeze({ ...state.room, ...update });
+        room = Object.freeze({
+          ...state.room,
+          ...update,
+          ...(update.roomType
+            ? { layout: layoutForType(update.roomType) }
+            : {}),
+        });
       if (
         ![room.width, room.depth, room.height].every(Number.isFinite) ||
+        (room.capacity !== undefined &&
+          (!Number.isInteger(room.capacity) ||
+            room.capacity < 0 ||
+            room.capacity > 200)) ||
+        (room.roomType !== undefined && !ROOM_TYPES.includes(room.roomType)) ||
         room.width < 3 ||
         room.width > 30 ||
         room.depth < 3 ||
@@ -243,7 +262,9 @@ export function createDeviceStore(): StoreApi<DeviceState> {
         room.width === state.room.width &&
         room.depth === state.room.depth &&
         room.height === state.room.height &&
-        room.layout === state.room.layout
+        room.layout === state.room.layout &&
+        room.capacity === state.room.capacity &&
+        room.roomType === state.room.roomType
       )
         return;
       const devices = Object.fromEntries(
@@ -252,12 +273,18 @@ export function createDeviceStore(): StoreApi<DeviceState> {
           d
             ? freezeDevice({
                 ...d,
-                position: snapToSurface(d.position, d.surface, room),
+                position: d.placement
+                  ? d.position
+                  : snapToSurface(d.position, d.surface, room),
               })
             : undefined,
         ]),
       );
-      set({ room, roomPreset: "custom", devices: Object.freeze(devices) });
+      set({
+        room,
+        roomPreset: "custom",
+        devices: solvePlacements(devices, room),
+      });
     },
     room: ROOM_PRESETS.boardroom.room,
     roomPreset: "boardroom",
@@ -273,20 +300,23 @@ export function createDeviceStore(): StoreApi<DeviceState> {
           device
             ? freezeDevice({
                 ...device,
-                position: snapToSurface(
-                  {
-                    x: (device.position.x * room.width) / state.room.width,
-                    y: (device.position.y * room.height) / state.room.height,
-                    z: (device.position.z * room.depth) / state.room.depth,
-                  },
-                  device.surface,
-                  room,
-                ),
+                position: device.placement
+                  ? device.position
+                  : snapToSurface(
+                      {
+                        x: (device.position.x * room.width) / state.room.width,
+                        y:
+                          (device.position.y * room.height) / state.room.height,
+                        z: (device.position.z * room.depth) / state.room.depth,
+                      },
+                      device.surface,
+                      room,
+                    ),
               })
             : undefined,
         ]),
       );
-      set({ room, roomPreset: id, devices: Object.freeze(devices) });
+      set({ room, roomPreset: id, devices: solvePlacements(devices, room) });
     },
     devices: Object.freeze({}),
     selectedId: null,
@@ -408,7 +438,10 @@ export function createDeviceStore(): StoreApi<DeviceState> {
               .map((d) => 90 + d.ports.length * 24),
           ) + 80;
       set((state) => ({
-        devices: Object.freeze({ ...state.devices, [id]: device }),
+        devices: solvePlacements(
+          { ...state.devices, [id]: device },
+          state.room,
+        ),
         nodePositions: Object.freeze({
           ...state.nodePositions,
           [id]: Object.freeze({
@@ -427,6 +460,12 @@ export function createDeviceStore(): StoreApi<DeviceState> {
         ...previous,
         ...update,
         id,
+        placement:
+          update.placement ??
+          ((update.position || update.rotation || update.surface) &&
+          previous.placement
+            ? { ...previous.placement, mode: "manual" }
+            : previous.placement),
         position: { ...previous.position, ...update.position },
         rotation: { ...previous.rotation, ...update.rotation },
         metadata: { ...previous.metadata, ...update.metadata },
@@ -435,6 +474,8 @@ export function createDeviceStore(): StoreApi<DeviceState> {
         sameXYZ(previous.position, device.position) &&
         sameXYZ(previous.rotation, device.rotation) &&
         previous.catalogId === device.catalogId &&
+        JSON.stringify(previous.placement) ===
+          JSON.stringify(device.placement) &&
         previous.kind === device.kind &&
         previous.surface === device.surface &&
         JSON.stringify(previous.metadata) === JSON.stringify(device.metadata) &&
@@ -447,7 +488,10 @@ export function createDeviceStore(): StoreApi<DeviceState> {
         (update.ports === undefined || update.ports === previous.ports)
       )
         return;
-      const devices = Object.freeze({ ...state.devices, [id]: device });
+      const devices = solvePlacements(
+        { ...state.devices, [id]: device },
+        state.room,
+      );
       const connections =
         update.ports === undefined
           ? state.connections
@@ -479,7 +523,7 @@ export function createDeviceStore(): StoreApi<DeviceState> {
       const nodePositions = { ...state.nodePositions };
       delete nodePositions[id];
       set({
-        devices: Object.freeze(devices),
+        devices: solvePlacements(devices, state.room),
         nodePositions: Object.freeze(nodePositions),
         connections: Object.freeze(
           state.connections.filter(
@@ -561,6 +605,8 @@ export function snapToSurface(
       Math.max(Math.ceil(min / step), Math.round(v / step)),
     ) * step;
   if (surface === "table") {
+    if (!roomLayout(room).tables.length)
+      return snapToSurface(point, "floor", room, step);
     const table = roomLayout(room).tables.reduce((best, current) =>
       Math.hypot(point.x - current.x, point.z - current.z) <
       Math.hypot(point.x - best.x, point.z - best.z)
