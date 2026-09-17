@@ -1,3 +1,4 @@
+import { cableRoutes, type WorkspaceMode } from "./workspace/SpatialOverlays";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { CanvasManager, type WorkspaceView } from "./workspace/CanvasManager";
@@ -17,6 +18,7 @@ import { EngineeringPanel } from "./components/EngineeringPanel";
 import "./workspace.css";
 export default function App() {
   const [store] = useState(createWorkspace);
+  const selectedId = useStore(store.api, (s) => s.selectedId);
   const devices = useStore(store.api, (s) => s.devices),
     connections = useStore(store.api, (s) => s.connections),
     settings = useStore(store.api, (s) => s.engineering),
@@ -29,9 +31,21 @@ export default function App() {
     canvas = useRef<CanvasManager | null>(null);
   const [view, setView] = useState<WorkspaceView>("isometric"),
     [tab, setTab] = useState<"spatial" | "schematic">("spatial");
-  const [heat, setHeat] = useState<
-    "off" | "spl" | "intelligibility" | "visual"
-  >("off");
+  const [mode, setMode] = useState<WorkspaceMode>("overview"),
+    [cableFilter, setCableFilter] = useState("All"),
+    [selectedCable, setSelectedCable] = useState<string | null>(null);
+  const routes = useMemo(
+    () => cableRoutes(store.api.getState()),
+    [devices, connections, room, store],
+  );
+  useEffect(() => {
+    if (
+      cableFilter !== "All" &&
+      !routes.some((route) => route.category === cableFilter)
+    )
+      setCableFilter("All");
+  }, [routes, cableFilter]);
+  const cable = routes.find((c) => c.id === selectedCable);
   const [ready, setReady] = useState(false),
     [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -40,6 +54,7 @@ export default function App() {
     try {
       manager = new CanvasManager(host.current, {
         room: store.api.getState().room,
+        onCableSelect: setSelectedCable,
         onSelect: (id) => store.api.getState().selectDevice(id),
       });
     } catch (cause) {
@@ -64,10 +79,28 @@ export default function App() {
     };
   }, [store]);
   useEffect(() => {
-    canvas.current?.setHeatmap(heat === "visual" ? "off" : heat, audit.field);
-    canvas.current?.setVisualOverlay(heat === "visual", audit.visual);
-    canvas.current?.setVisualCones(heat === "visual", devices, settings);
-  }, [audit, heat, ready, devices, settings]);
+    const manager = canvas.current;
+    manager?.setHeatmap(mode === "speaker" ? "spl" : "off", audit.field);
+    manager?.setVisualOverlay(mode === "display", audit.visual);
+    manager?.setVisualCones(mode === "display", devices, settings);
+    manager?.setWorkspaceMode(
+      mode,
+      store.api.getState(),
+      cableFilter,
+      selectedCable,
+    );
+  }, [
+    audit,
+    mode,
+    ready,
+    devices,
+    settings,
+    connections,
+    room,
+    cableFilter,
+    selectedCable,
+    store,
+  ]);
   function spawn(profileId: string, point?: XYZ) {
     const count = store
       .snapshot()
@@ -143,33 +176,111 @@ export default function App() {
             </div>
             <div className="analysis-toolbar">
               <label>
-                Coverage layer{" "}
+                Workspace mode{" "}
                 <select
-                  aria-label="Coverage layer"
-                  value={heat}
-                  onChange={(e) => setHeat(e.target.value as typeof heat)}
+                  aria-label="Workspace mode"
+                  value={mode}
+                  onChange={(e) => setMode(e.target.value as WorkspaceMode)}
                 >
-                  <option value="off">Off</option>
-                  <option value="visual">Visual seat limits (planning)</option>
-                  <option value="spl">Direct SPL estimate</option>
-                  <option value="intelligibility">
-                    Intelligibility proxy (not STI)
-                  </option>
+                  {Object.entries({
+                    overview: "Overview",
+                    measurements: "Measurements",
+                    cables: "Cable Map",
+                    camera: "Camera Coverage",
+                    microphone: "Microphone Coverage",
+                    speaker: "Speaker Coverage",
+                    display: "Display / Viewing",
+                  }).map(([id, label]) => (
+                    <option key={id} value={id}>
+                      {label}
+                    </option>
+                  ))}
                 </select>
               </label>
-              {heat === "visual" && (
-                <span className="heat-legend">
-                  Green: within · Yellow: near limit · Red: review · Gray: no
-                  display
-                </span>
-              )}
-              {heat !== "off" && heat !== "visual" && (
-                <span className="heat-legend">
-                  {heat === "spl" ? "40 dB" : "0.0"} <i />{" "}
-                  {heat === "spl" ? "90 dB" : "1.0"} · gray = unknown
-                </span>
+              <button
+                onClick={() => {
+                  setView("isometric");
+                  canvas.current?.setView("isometric", false);
+                }}
+              >
+                Home
+              </button>
+              <button
+                onClick={() => {
+                  if (view === "seat") setView("isometric");
+                  canvas.current?.fitRoom();
+                }}
+              >
+                Fit room
+              </button>
+              <button
+                disabled={!selectedId}
+                onClick={() => canvas.current?.focusSelected()}
+              >
+                Focus selected
+              </button>
+              {mode === "cables" && (
+                <label>
+                  Cable type{" "}
+                  <select
+                    aria-label="Cable type"
+                    value={cableFilter}
+                    onChange={(e) => setCableFilter(e.target.value)}
+                  >
+                    {["All", ...new Set(routes.map((c) => c.category))].map(
+                      (c) => (
+                        <option key={c}>{c}</option>
+                      ),
+                    )}
+                  </select>
+                </label>
               )}
             </div>
+            {mode === "cables" && (
+              <div className="mode-note">
+                {routes.length} actual connections · overhead orthogonal routes
+                are planning estimates, not installation paths. Click a cable to
+                inspect.
+              </div>
+            )}
+            {mode === "camera" && (
+              <div className="mode-note">
+                Catalog FOV guides, up to 6 m preview depth (not rated range).
+                Missing VFOV shows horizontal angles only; missing HFOV shows no
+                guide. Pan/tilt uses device rotation.
+              </div>
+            )}
+            {mode === "microphone" && (
+              <div className="mode-note">
+                Catalog pickup-radius envelopes at 1.2 m; microphone polar/lobe
+                shape and intelligibility are not inferred. Missing radius shows
+                no guide.
+              </div>
+            )}
+            {mode === "speaker" && (
+              <div className="mode-note">
+                Direct SPL estimate: blue 40 dB → red 90 dB; gray unknown.
+              </div>
+            )}
+            {mode === "display" && (
+              <div className="mode-note">
+                Planning limits: green within · yellow near limit · red outside
+                · gray unknown.
+              </div>
+            )}
+            {cable && mode === "cables" && (
+              <div className="cable-inspector" aria-label="Cable inspector">
+                <strong>Cable {cable.id}</strong>
+                <span>
+                  {cable.source} / {cable.from.portId} → {cable.destination} /{" "}
+                  {cable.to.portId}
+                </span>
+                <span>
+                  {cable.signal} · {cable.length.toFixed(2)} m estimated route
+                  between device anchors
+                </span>
+              </div>
+            )}
             <div
               ref={host}
               className="canvas-host"
@@ -209,7 +320,8 @@ export default function App() {
             )}
             <div className="canvas-footer">
               <span>
-                Drag to position · Alt-drag to change surface · Esc to cancel
+                Drag empty space: orbit · Wheel: zoom · Right/middle drag: pan ·
+                Drag device: move · Double-click: focus
               </span>
               <span>{Object.keys(devices).length} devices</span>
             </div>

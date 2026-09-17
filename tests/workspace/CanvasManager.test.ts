@@ -19,6 +19,9 @@ vi.mock("three", async (importOriginal) => {
     WebGLRenderer: class {
       domElement = {
         style: { cssText: "" },
+        setPointerCapture: vi.fn(),
+        hasPointerCapture: () => false,
+        releasePointerCapture: vi.fn(),
         remove: vi.fn(),
         getBoundingClientRect: () => ({
           left: 0,
@@ -26,8 +29,21 @@ vi.mock("three", async (importOriginal) => {
           width: 800,
           height: 600,
         }),
-        addEventListener: (name: string, listener: (event: unknown) => void) =>
-          mocks.listeners.set(name, listener),
+        addEventListener: (
+          name: string,
+          listener: (event: unknown) => void,
+        ) => {
+          const previous = mocks.listeners.get(name);
+          mocks.listeners.set(
+            name,
+            previous
+              ? (event) => {
+                  previous(event);
+                  listener(event);
+                }
+              : listener,
+          );
+        },
         removeEventListener: (name: string) => mocks.listeners.delete(name),
       };
       setClearColor = vi.fn();
@@ -181,7 +197,9 @@ describe("CanvasManager", () => {
     expect(manager.camera).toBeInstanceOf(THREE.OrthographicCamera);
     expect(manager.camera.position.x).toBe(0);
     manager.setView("isometric", false);
-    expect(manager.camera.position.x).toBeCloseTo(manager.camera.position.y);
+    expect(manager.camera.position.x).toBeCloseTo(
+      manager.camera.position.y - manager.room.height / 2,
+    );
     flush();
     expect(frames.size).toBe(0);
   });
@@ -236,6 +254,7 @@ describe("CanvasManager", () => {
     mocks.listeners.get("pointerdown")?.({
       isPrimary: true,
       button: 0,
+      preventDefault: vi.fn(),
       clientX: 400,
       clientY: 300,
     });
@@ -243,6 +262,7 @@ describe("CanvasManager", () => {
     mocks.listeners.get("pointerdown")?.({
       isPrimary: true,
       button: 0,
+      preventDefault: vi.fn(),
       clientX: 0,
       clientY: 0,
     });

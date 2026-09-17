@@ -677,3 +677,35 @@ h3 {
     flex-wrap: wrap;
   }
 }
+
+.mode-note {
+  padding: 6px 16px;
+  font-size: 11px;
+  color: #b3c8dc;
+  background: #17212c;
+}
+.cable-inspector {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 16px;
+  font-size: 11px;
+  background: #19304a;
+  overflow-wrap: anywhere;
+}
+.analysis-toolbar button {
+  background: #24354b;
+  border: 1px solid #526881;
+  border-radius: 5px;
+  color: #dce9f5;
+  padding: 6px 9px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.analysis-toolbar {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.canvas-host canvas {
+  image-rendering: auto;
+}

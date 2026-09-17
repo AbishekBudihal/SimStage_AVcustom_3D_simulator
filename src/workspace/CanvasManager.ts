@@ -1,3 +1,5 @@
+import { SpatialOverlays, type WorkspaceMode } from "./SpatialOverlays";
+import { ViewportNavigation, orthographicFit } from "./ViewportNavigation";
 import * as THREE from "three";
 import { SpatialAssets } from "./SpatialAssets";
 import {
@@ -15,10 +17,11 @@ import {
   type EngineeringSettings,
 } from "./DeviceStore";
 
-export type WorkspaceView = "plan" | "isometric" | "seat";
+export type WorkspaceView = "plan" | "isometric" | "seat" | "front";
 export interface CanvasManagerOptions {
   readonly onSelect: (id: string | null) => void;
   readonly room?: RoomSize;
+  readonly onCableSelect?: (id: string | null) => void;
 }
 
 /** Owns GPU resources and DOM listeners. No perpetual animation loop. */
@@ -63,10 +66,14 @@ export class CanvasManager {
   private selectedId: string | null = null;
   private frame = 0;
   private disposed = false;
-  private transition:
-    { start: number; from: THREE.Vector3; to: THREE.Vector3 } | undefined;
   private readonly target = new THREE.Vector3();
   private distance: number;
+  private navigation: ViewportNavigation | undefined;
+  private fittedSpan = 1;
+  private fitBounds: THREE.Box3 | undefined;
+  private overlays: SpatialOverlays | undefined;
+  private onWindowResize = () => this.resize();
+  private doubleClick = () => this.focusSelected();
 
   constructor(
     readonly host: HTMLElement,
@@ -112,6 +119,16 @@ export class CanvasManager {
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(host);
     this.renderer.domElement.addEventListener("pointerdown", this.select);
+    this.overlays = new SpatialOverlays(this.scene);
+    this.navigation = new ViewportNavigation(
+      this.renderer.domElement,
+      () => this.camera,
+      this.invalidate,
+      (e) => !!this.pickDevice(e),
+      () => Math.max(this.room.width, this.room.depth),
+    );
+    this.renderer.domElement.addEventListener("dblclick", this.doubleClick);
+    window.addEventListener?.("resize", this.onWindowResize);
     this.setView("isometric", false);
     this.resize();
   }
@@ -288,7 +305,26 @@ export class CanvasManager {
   private select = (event: PointerEvent): void => {
     if (this.disposed || !event.isPrimary || event.button !== 0) return;
     const rect = this.renderer.domElement.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return;
+    if (!rect.width || !rect.height) return;
+    const deviceId = this.pickDevice(event);
+    if (!deviceId && this.overlays?.cables.length) {
+      this.raycaster.params.Line = { threshold: 0.13 };
+      const hit = this.raycaster.intersectObjects(
+        this.overlays.cables,
+        false,
+      )[0];
+      this.options.onCableSelect?.(hit?.object.userData.cableId ?? null);
+      if (hit) return;
+    }
+    this.options.onCableSelect?.(null);
+    this.options.onSelect(deviceId);
+  };
+  private pickDevice(event: {
+    clientX: number;
+    clientY: number;
+  }): string | null {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
     this.pointer.set(
       ((event.clientX - rect.left) / rect.width) * 2 - 1,
       1 - ((event.clientY - rect.top) / rect.height) * 2,
@@ -297,10 +333,8 @@ export class CanvasManager {
     this.scene.updateMatrixWorld(true);
     this.raycaster.setFromCamera(this.pointer, this.camera);
     const hit = this.raycaster.intersectObjects(this.pickTargets, true)[0];
-    this.options.onSelect(
-      hit ? (hit.object.userData.deviceId as string) : null,
-    );
-  };
+    return hit?.object.userData.deviceId ?? null;
+  }
 
   placementPoint(
     clientX: number,
@@ -403,34 +437,100 @@ export class CanvasManager {
     }
     this.invalidate();
   }
-  setView(view: WorkspaceView, animate = true): void {
+  setWorkspaceMode(
+    mode: WorkspaceMode,
+    state: DeviceState,
+    filter = "All",
+    selectedCable: string | null = null,
+  ): void {
     if (this.disposed) return;
-    this.transition = undefined;
-    this.view = view;
-    if (view === "seat") {
-      this.grid.visible = false;
-      this.activeCamera = this.seatCamera;
-      const eyeHeight = Math.min(1.2, this.room.height * 0.8);
-      this.camera.position.set(0, eyeHeight, this.room.depth * 0.3);
-      this.camera.lookAt(0, eyeHeight, -this.room.depth / 2);
-      this.resize();
-      return;
-    }
-    this.activeCamera = this.overviewCamera;
-    this.grid.visible = view === "plan";
-    const to =
-      view === "plan"
-        ? new THREE.Vector3(0, this.distance, 0.0001)
-        : new THREE.Vector3(1, 1, 1).normalize().multiplyScalar(this.distance);
-    this.transition =
-      animate && !window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? { start: performance.now(), from: this.camera.position.clone(), to }
-        : undefined;
-    if (!this.transition) {
-      this.camera.position.copy(to);
-      this.camera.lookAt(this.target);
-    }
+    this.overlays?.update(mode, state, filter, selectedCable);
     this.invalidate();
+  }
+  setView(view: WorkspaceView, _animate = true): void {
+    if (this.disposed) return;
+    this.navigation?.stop();
+    this.view = view;
+    this.grid.visible = view === "plan";
+    const centre = new THREE.Vector3(0, this.room.height / 2, 0);
+    if (view === "seat") {
+      this.activeCamera = this.seatCamera;
+      const eye = Math.min(1.2, this.room.height * 0.8);
+      this.camera.position.set(0, eye, this.room.depth * 0.3);
+      this.target.set(0, eye, -this.room.depth / 2);
+    } else {
+      this.activeCamera = this.overviewCamera;
+      this.overviewCamera.zoom = 1;
+      this.target.copy(centre);
+      const direction =
+        view === "plan"
+          ? new THREE.Vector3(0, 1, 0.00001)
+          : view === "front"
+            ? new THREE.Vector3(0, 0, 1)
+            : new THREE.Vector3(1, 1, 1).normalize();
+      this.camera.position
+        .copy(centre)
+        .addScaledVector(direction, this.distance);
+    }
+    this.camera.lookAt(this.target);
+    this.navigation?.target.copy(this.target);
+    this.fitProjection();
+    this.resize();
+  }
+  private roomBounds() {
+    return new THREE.Box3(
+      new THREE.Vector3(-this.room.width / 2, 0, -this.room.depth / 2),
+      new THREE.Vector3(
+        this.room.width / 2,
+        this.room.height,
+        this.room.depth / 2,
+      ),
+    );
+  }
+  private fitProjection(bounds = this.roomBounds()) {
+    this.fitBounds = bounds;
+    const rect = this.host.getBoundingClientRect();
+    this.fittedSpan = orthographicFit(
+      this.overviewCamera,
+      bounds,
+      rect.width / Math.max(1, rect.height),
+    );
+  }
+  fitRoom(): void {
+    this.setView(this.view === "seat" ? "isometric" : this.view, false);
+  }
+  focusSelected(): void {
+    const mesh = this.selectedId ? this.meshes.get(this.selectedId) : undefined;
+    if (!mesh || this.disposed) return;
+    this.scene.updateMatrixWorld(true);
+    const bounds = new THREE.Box3().setFromObject(mesh),
+      centre = bounds.getCenter(new THREE.Vector3());
+    const oldTarget = this.navigation?.target ?? this.target;
+    const direction = this.camera.position.clone().sub(oldTarget).normalize();
+    this.navigation?.stop();
+    this.target.copy(centre);
+    this.navigation?.target.copy(centre);
+    this.camera.position
+      .copy(centre)
+      .addScaledVector(
+        direction,
+        Math.max(bounds.getSize(new THREE.Vector3()).length() * 2, 0.8),
+      );
+    this.camera.lookAt(centre);
+    if (this.camera instanceof THREE.OrthographicCamera) {
+      this.camera.zoom = 1;
+      this.fitBounds = bounds;
+      this.fittedSpan = Math.max(
+        0.35,
+        orthographicFit(
+          this.camera,
+          bounds,
+          this.host.getBoundingClientRect().width /
+            Math.max(1, this.host.getBoundingClientRect().height),
+        ),
+      );
+    }
+    this.resize();
   }
 
   invalidate = (): void => {
@@ -438,20 +538,10 @@ export class CanvasManager {
       this.frame = requestAnimationFrame(this.render);
   };
 
-  private render = (now: number): void => {
+  private render = (): void => {
     this.frame = 0;
     if (this.disposed) return;
-    if (this.transition) {
-      const t = Math.min(1, (now - this.transition.start) / 180);
-      this.camera.position.lerpVectors(
-        this.transition.from,
-        this.transition.to,
-        t * t * (3 - 2 * t),
-      );
-      this.camera.lookAt(this.target);
-      if (t === 1) this.transition = undefined;
-      else this.invalidate();
-    }
+    if (this.navigation?.update()) this.invalidate();
     this.renderer.render(this.scene, this.camera);
   };
 
@@ -462,12 +552,16 @@ export class CanvasManager {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.setSize(width, height, false);
     const aspect = width / height;
-    const span =
-      Math.max(this.room.width, this.room.depth, this.room.height) * 0.66;
-    this.overviewCamera.left = -span * Math.max(1, aspect);
-    this.overviewCamera.right = -this.overviewCamera.left;
-    this.overviewCamera.top = span * Math.max(1, 1 / aspect);
-    this.overviewCamera.bottom = -this.overviewCamera.top;
+    if (this.fitBounds)
+      this.fittedSpan = Math.max(
+        0.35,
+        orthographicFit(this.overviewCamera, this.fitBounds, aspect),
+      );
+    const span = this.fittedSpan;
+    this.overviewCamera.left = -span * aspect;
+    this.overviewCamera.right = span * aspect;
+    this.overviewCamera.top = span;
+    this.overviewCamera.bottom = -span;
     this.overviewCamera.updateProjectionMatrix();
     this.seatCamera.aspect = aspect;
     this.seatCamera.updateProjectionMatrix();
@@ -529,9 +623,12 @@ export class CanvasManager {
     this.disposed = true;
     cancelAnimationFrame(this.frame);
     this.frame = 0;
-    this.transition = undefined;
     this.renderer.domElement.removeEventListener("pointerdown", this.select);
     this.observer.disconnect();
+    this.navigation?.dispose();
+    this.overlays?.dispose();
+    this.renderer.domElement.removeEventListener("dblclick", this.doubleClick);
+    window.removeEventListener?.("resize", this.onWindowResize);
     this.assets.dispose();
     this.roomAssets.dispose();
     if (this.visualBoundary) {
