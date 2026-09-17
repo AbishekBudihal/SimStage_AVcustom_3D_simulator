@@ -15,6 +15,9 @@ export function visualCheck(
   seat: XYZ,
   settings: EngineeringSettings,
 ) {
+  return visualEvaluator(display, settings)(seat);
+}
+function visualEvaluator(display: PlacedDevice, settings: EngineeringSettings) {
   const quaternion = new T.Quaternion().setFromEuler(
     new T.Euler(
       display.rotation.x,
@@ -29,36 +32,54 @@ export function visualCheck(
       surfaceYaw(display.surface),
     ),
   );
-  const relative = new T.Vector3(
-    seat.x - display.position.x,
-    seat.y - display.position.y,
-    seat.z - display.position.z,
-  ).applyQuaternion(quaternion.invert());
-  const height = display.metadata.imageHeightM ?? 0.8;
-  const distance = Math.hypot(relative.x, relative.z);
-  const horizontal = Math.abs(Math.atan2(relative.x, relative.z) * radToDeg);
-  const vertical =
-    Math.atan2(Math.abs(relative.y) + height / 2, Math.max(0.001, distance)) *
-    radToDeg;
-  const heuristicMax = height * settings.viewingRatio;
-  // AVIXA public BDM acuity factor 200; element percentage is a content assumption.
-  const bdmMax = ((height * settings.elementPercent) / 100) * 200;
-  const pass =
-    relative.z > 0 &&
-    distance <= Math.min(heuristicMax, bdmMax) &&
-    horizontal <= settings.horizontalLimit &&
-    vertical <= settings.verticalLimit;
-  const margin = Math.max(
-    distance / Math.min(heuristicMax, bdmMax),
-    horizontal / settings.horizontalLimit,
-    vertical / settings.verticalLimit,
-  );
-  const status: "green" | "yellow" | "red" = !pass
-    ? "red"
-    : margin >= 0.9
-      ? "yellow"
-      : "green";
-  return { distance, horizontal, vertical, heuristicMax, bdmMax, pass, status };
+  quaternion.invert();
+  const relative = new T.Vector3();
+  return (seat: XYZ) => {
+    relative
+      .set(
+        seat.x - display.position.x,
+        seat.y - display.position.y,
+        seat.z - display.position.z,
+      )
+      .applyQuaternion(quaternion);
+    const height = display.metadata.imageHeightM ?? 0;
+    const distance = Math.hypot(relative.x, relative.z);
+    const horizontal = Math.abs(Math.atan2(relative.x, relative.z) * radToDeg);
+    const vertical =
+      Math.atan2(Math.abs(relative.y) + height / 2, Math.max(0.001, distance)) *
+      radToDeg;
+    const heuristicMax = height * settings.viewingRatio;
+    // AVIXA public BDM acuity factor 200; element percentage is a content assumption.
+    const bdmMax = ((height * settings.elementPercent) / 100) * 200;
+    const pass =
+      height > 0 &&
+      relative.z > 0 &&
+      distance <= Math.min(heuristicMax, bdmMax) &&
+      horizontal <= settings.horizontalLimit &&
+      vertical <= settings.verticalLimit;
+    const margin = Math.max(
+      distance / Math.min(heuristicMax, bdmMax),
+      horizontal / settings.horizontalLimit,
+      vertical / settings.verticalLimit,
+    );
+    const status: "green" | "yellow" | "red" | "unknown" =
+      height <= 0
+        ? "unknown"
+        : !pass
+          ? "red"
+          : margin >= 0.9
+            ? "yellow"
+            : "green";
+    return {
+      distance,
+      horizontal,
+      vertical,
+      heuristicMax,
+      bdmMax,
+      pass,
+      status,
+    };
+  };
 }
 /** Free-field energy sum with optional sensitivity/drive and approximate conical directivity. */
 export function directSpl(
@@ -142,6 +163,50 @@ export interface FieldPoint {
   spl: number | null;
   intelligibility: number | null;
 }
+/** Seat-plane slice of the viewing region. Boundaries use the same checks as seat markers,
+ * including all Euler rotations. Grid cells with unknown image size produce no region.
+ * Each boundary segment is projected to the floor for legibility. */
+export function visualRegionBoundary(
+  display: PlacedDevice,
+  settings: EngineeringSettings,
+  room: RoomSize,
+): number[] {
+  if (!display.metadata.imageHeightM) return [];
+  const step = 0.25,
+    cols = Math.ceil(room.width / step),
+    rows = Math.ceil(room.depth / step);
+  const dx = room.width / cols,
+    dz = room.depth / rows;
+  const cells = new Uint8Array(cols * rows),
+    check = visualEvaluator(display, settings);
+  for (let z = 0; z < rows; z++)
+    for (let x = 0; x < cols; x++)
+      cells[z * cols + x] = Number(
+        check({
+          x: -room.width / 2 + (x + 0.5) * dx,
+          y: 1.2,
+          z: -room.depth / 2 + (z + 0.5) * dz,
+        }).pass,
+      );
+  const vertices: number[] = [];
+  const line = (x1: number, z1: number, x2: number, z2: number) =>
+    vertices.push(x1, 0.08, z1, x2, 0.08, z2);
+  for (let z = 0; z < rows; z++)
+    for (let x = 0; x < cols; x++)
+      if (cells[z * cols + x]) {
+        const left = -room.width / 2 + x * dx,
+          top = -room.depth / 2 + z * dz;
+        if (x === 0 || !cells[z * cols + x - 1])
+          line(left, top, left, top + dz);
+        if (x === cols - 1 || !cells[z * cols + x + 1])
+          line(left + dx, top, left + dx, top + dz);
+        if (z === 0 || !cells[(z - 1) * cols + x])
+          line(left, top, left + dx, top);
+        if (z === rows - 1 || !cells[(z + 1) * cols + x])
+          line(left, top + dz, left + dx, top + dz);
+      }
+  return vertices;
+}
 export function engineeringAudit(state: DeviceState, room: RoomSize) {
   const devices = Object.values(state.devices).filter(
     (d): d is PlacedDevice => !!d,
@@ -181,6 +246,17 @@ export function engineeringAudit(state: DeviceState, room: RoomSize) {
   else if (failures.length)
     warnings.push(
       `Visual: ${failures.length}/${seats.length} seats outside planning limits (${failures.map((s) => s.id).join(", ")}).`,
+    );
+  if (displays.some((d) => !d.metadata.imageHeightM))
+    warnings.push(
+      "Visual: image height is missing; no assumed screen size is used.",
+    );
+  const missingPorts = devices.filter(
+    (d) => !d.ports.length && d.kind !== "rack",
+  ).length;
+  if (missingPorts)
+    warnings.push(
+      `Wiring: ${missingPorts} devices have no supplied port definitions; mapping is incomplete.`,
     );
   const back = visual.find((s) => s.id === "Back");
   if (back?.results.length && !back.results.some((r) => r.pass))
@@ -250,7 +326,7 @@ export function engineeringAudit(state: DeviceState, room: RoomSize) {
     devices.length > 0 &&
       !bom.incomplete &&
       bom.heat <= state.engineering.heatBudget,
-    devices.length > 0 && unconnected === 0,
+    devices.length > 0 && unconnected === 0 && missingPorts === 0,
   ];
   return {
     visual,

@@ -1,4 +1,5 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
+import { INITIAL_CATALOG, parseCatalog, type CatalogProfile } from "./catalog";
 import { roomLayout } from "./RoomLayout";
 import { ROOM_PRESETS, type RoomPresetId } from "./RoomPresets";
 
@@ -12,7 +13,12 @@ export type DeviceKind =
   | "source"
   | "matrix"
   | "dsp"
-  | "power";
+  | "power"
+  | "extender"
+  | "amplifier"
+  | "network"
+  | "control"
+  | "codec";
 export type MountSurface =
   "floor" | "ceiling" | "table" | "north" | "south" | "east" | "west";
 export interface DevicePort {
@@ -21,6 +27,9 @@ export interface DevicePort {
   readonly signal: string;
   readonly direction: "input" | "output" | "bidirectional";
   readonly connector?: string;
+  readonly transport?: string;
+  readonly signalTypes?: readonly string[];
+  readonly required?: boolean;
   readonly notes?: string;
 }
 export interface DeviceMetadata {
@@ -91,7 +100,10 @@ export interface EngineeringSettings {
 }
 export interface DeviceState {
   readonly room: RoomSize;
-  readonly roomPreset: RoomPresetId;
+  readonly catalog: readonly CatalogProfile[];
+  importCatalog(input: unknown, sourceFile?: string): void;
+  setRoom(update: Partial<RoomSize>): void;
+  readonly roomPreset: RoomPresetId | "custom";
   setRoomPreset(id: RoomPresetId): void;
   readonly devices: Readonly<Record<string, PlacedDevice | undefined>>;
   readonly selectedId: string | null;
@@ -176,7 +188,16 @@ function freezeDevice(input: PlacedDevice): PlacedDevice {
     ...input,
     position: Object.freeze({ ...input.position }),
     rotation: Object.freeze({ ...input.rotation }),
-    ports: Object.freeze(input.ports.map((port) => Object.freeze({ ...port }))),
+    ports: Object.freeze(
+      input.ports.map((port) =>
+        Object.freeze({
+          ...port,
+          ...(port.signalTypes
+            ? { signalTypes: Object.freeze([...port.signalTypes]) }
+            : {}),
+        }),
+      ),
+    ),
     metadata: Object.freeze({ ...input.metadata }),
     ...(input.dimensions
       ? { dimensions: Object.freeze({ ...input.dimensions }) }
@@ -191,6 +212,53 @@ const sameXYZ = (a: XYZ, b: XYZ): boolean =>
 /** Independent Zustand store per workspace; vanilla API needs no React runtime. */
 export function createDeviceStore(): StoreApi<DeviceState> {
   return createStore<DeviceState>()((set, get) => ({
+    catalog: INITIAL_CATALOG,
+    importCatalog(input, sourceFile) {
+      const incoming = parseCatalog(input, sourceFile),
+        state = get();
+      const ids = new Set(state.catalog.map((p) => p.id));
+      if (incoming.some((p) => ids.has(p.id)))
+        throw new Error(
+          "Catalog IDs already exist. Use new IDs for revised profiles so placed specifications remain traceable.",
+        );
+      set({ catalog: Object.freeze([...state.catalog, ...incoming]) });
+    },
+    setRoom(update) {
+      const state = get(),
+        room = Object.freeze({ ...state.room, ...update });
+      if (
+        ![room.width, room.depth, room.height].every(Number.isFinite) ||
+        room.width < 3 ||
+        room.width > 30 ||
+        room.depth < 3 ||
+        room.depth > 30 ||
+        room.height < 2 ||
+        room.height > 8 ||
+        !["conference", "huddle", "training"].includes(
+          room.layout ?? "conference",
+        )
+      )
+        throw new Error("Room requires width/length 3–30 m and height 2–8 m");
+      if (
+        room.width === state.room.width &&
+        room.depth === state.room.depth &&
+        room.height === state.room.height &&
+        room.layout === state.room.layout
+      )
+        return;
+      const devices = Object.fromEntries(
+        Object.entries(state.devices).map(([id, d]) => [
+          id,
+          d
+            ? freezeDevice({
+                ...d,
+                position: snapToSurface(d.position, d.surface, room),
+              })
+            : undefined,
+        ]),
+      );
+      set({ room, roomPreset: "custom", devices: Object.freeze(devices) });
+    },
     room: ROOM_PRESETS.boardroom.room,
     roomPreset: "boardroom",
     setRoomPreset(id) {

@@ -7,17 +7,29 @@ export interface TableBounds {
   height: number;
 }
 export function roomLayout(room: RoomSize) {
-  const tableWidth = Math.min(1.6, room.width * 0.3),
-    tableDepth = room.depth * (room.layout === "huddle" ? 0.44 : 0.52),
+  const tableWidth = Math.min(1.6, room.width - 2.2),
+    tableDepth = Math.min(
+      room.depth - 1.8,
+      room.depth * (room.layout === "huddle" ? 0.44 : 0.52),
+    ),
     tableHeight = 0.75;
   const tables: TableBounds[] = [],
     seats: { id: string; position: XYZ; rotation: number }[] = [];
   if (room.layout === "training") {
-    for (let row = 0; row < 4; row++)
-      for (let column = 0; column < 3; column++) {
-        const x = (column - 1) * room.width * 0.28,
-          z = (row - 1.5) * room.depth * 0.19;
-        tables.push({ x, z, width: 2.4, depth: 0.6, height: tableHeight });
+    const columns = Math.max(1, Math.floor((room.width - 0.8) / 3.6)),
+      rows = Math.max(1, Math.floor((room.depth - 1.6) / 1.6));
+    const deskWidth = Math.min(2.4, room.width - 1.0);
+    for (let row = 0; row < rows; row++)
+      for (let column = 0; column < columns; column++) {
+        const x = (column - (columns - 1) / 2) * 3.6,
+          z = (row - (rows - 1) / 2) * 1.6 - 0.25;
+        tables.push({
+          x,
+          z,
+          width: deskWidth,
+          depth: 0.6,
+          height: tableHeight,
+        });
         for (const [seat, offset] of [-0.6, 0.6].entries())
           seats.push({
             id: `T${row + 1}-${column + 1}${seat ? "B" : "A"}`,

@@ -2,8 +2,8 @@
 
 Run `npm run dev`, `npm run build`, or `npm test` for the active application.
 
-- **Room presets:** Huddle (4 x 3 m), Boardroom (8 x 6 m), Training (14 x 8 m), with atomic device remapping and generated seating/tables.
-- **Hardware catalog:** source-linked Samsung, Shure, Q-SYS, Biamp, Sony and QSC profiles, physical dimensions/ports and power/heat provenance.
+- **Parametric room:** edit width, length and height to regenerate walls, tables, seating and overlays from the shared store.
+- **Simulator catalog:** 83 original JSON records with preserved dimensions, ports and provenance; searchable inventory and validated JSON imports. Missing electrical loads remain unknown.
 - **Spatial workspace:** architectural cutaway, conference table and seating,
   distinct procedural devices, Plan/Isometric/Seat views, inventory placement,
   table/wall/ceiling snapping and Alt-drag remounting with Escape rollback.

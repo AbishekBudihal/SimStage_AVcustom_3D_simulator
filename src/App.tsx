@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { CanvasManager, type WorkspaceView } from "./workspace/CanvasManager";
 import { useDeviceDrag } from "./workspace/useDeviceDrag";
-import { HARDWARE_CATALOG, hardwareDevice } from "./workspace/HardwareCatalog";
-import { ROOM_PRESETS, type RoomPresetId } from "./workspace/RoomPresets";
+import { deviceFromProfile } from "./workspace/catalog";
+import { CatalogLibrary } from "./components/CatalogLibrary";
+import { RoomController } from "./components/RoomController";
+
 import { createWorkspace } from "./workspace/createWorkspace";
 import { engineeringAudit } from "./workspace/Engineering";
 import type { XYZ } from "./workspace/DeviceStore";
@@ -18,8 +20,7 @@ export default function App() {
   const devices = useStore(store.api, (s) => s.devices),
     connections = useStore(store.api, (s) => s.connections),
     settings = useStore(store.api, (s) => s.engineering),
-    room = useStore(store.api, (s) => s.room),
-    roomPreset = useStore(store.api, (s) => s.roomPreset);
+    room = useStore(store.api, (s) => s.room);
   const audit = useMemo(
     () => engineeringAudit(store.api.getState(), room),
     [devices, connections, settings, store, room],
@@ -65,12 +66,17 @@ export default function App() {
   useEffect(() => {
     canvas.current?.setHeatmap(heat === "visual" ? "off" : heat, audit.field);
     canvas.current?.setVisualOverlay(heat === "visual", audit.visual);
-  }, [audit, heat, ready]);
+    canvas.current?.setVisualCones(heat === "visual", devices, settings);
+  }, [audit, heat, ready, devices, settings]);
   function spawn(profileId: string, point?: XYZ) {
     const count = store
       .snapshot()
       .filter((d) => d.catalogId === profileId).length;
-    const id = store.add(hardwareDevice(profileId, count, room, point));
+    const profile = store.api
+      .getState()
+      .catalog.find((p) => p.id === profileId);
+    if (!profile) return;
+    const id = store.add(deviceFromProfile(profile, count, room, point));
     store.api.getState().selectDevice(id);
   }
   return (
@@ -84,7 +90,7 @@ export default function App() {
           <small>ONLINE INSTRUMENTS</small>
         </div>
         <div className="project-heading">
-          {ROOM_PRESETS[roomPreset].label}
+          Parametric room
           <span>Spatial design + signal flow</span>
         </div>
         <span className="session-badge">
@@ -94,67 +100,11 @@ export default function App() {
       <main className="workspace-layout">
         <aside className="panel inventory-panel" aria-label="Quick inventory">
           <p className="eyebrow">SYSTEM BUILDER</p>
-          <h1>Equipment library</h1>
+          <RoomController store={store} />
           <p className="muted">
-            Manufacturer profiles · click or drag to place. Published
-            specifications and source links in the inspector.
+            {audit.seats} seats · {room.width * room.depth} m²
           </p>
-          <div className="inventory-list">
-            {HARDWARE_CATALOG.map((item) => (
-              <button
-                key={item.id}
-                draggable={ready}
-                disabled={!ready || !!error}
-                onDragStart={(e) => {
-                  e.dataTransfer.setData(
-                    "application/simstage-device",
-                    item.id,
-                  );
-                  e.dataTransfer.effectAllowed = "copy";
-                }}
-                onClick={() => spawn(item.id)}
-                className="inventory-button"
-              >
-                <span className="device-icon" aria-hidden="true">
-                  {item.icon}
-                </span>
-                <span>
-                  <strong>
-                    {item.manufacturer} {item.model}
-                  </strong>
-                  <small>
-                    {item.ports.length} ports · {item.surface} mount
-                  </small>
-                </span>
-                <span aria-hidden="true">+</span>
-              </button>
-            ))}
-          </div>
-          <div className="panel-note">
-            <span className="eyebrow">ROOM ENVELOPE</span>
-            <label className="engineering-input">
-              <span>Room preset</span>
-              <select
-                aria-label="Room preset"
-                value={roomPreset}
-                onChange={(e) =>
-                  store.api
-                    .getState()
-                    .setRoomPreset(e.target.value as RoomPresetId)
-                }
-              >
-                {Object.entries(ROOM_PRESETS).map(([id, preset]) => (
-                  <option key={id} value={id}>
-                    {preset.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <strong>
-              {room.width} × {room.depth} × {room.height} m
-            </strong>
-            <p>{audit.seats} seats · 0.75 m table · cutaway shell</p>
-          </div>
+          <CatalogLibrary store={store} ready={ready && !error} spawn={spawn} />
         </aside>
         <section className="canvas-panel" aria-label="Design workspace">
           <div className="design-tabs" role="tablist">
@@ -179,9 +129,7 @@ export default function App() {
           >
             <div className="canvas-toolbar">
               <div>
-                <strong>
-                  {ROOM_PRESETS[roomPreset].label} / {audit.seats} seats
-                </strong>
+                <strong>Parametric room / {audit.seats} seats</strong>
                 <span>Cutaway view · {room.width * room.depth} m²</span>
               </div>
               <ViewportHUD
@@ -236,7 +184,9 @@ export default function App() {
                 const kind = e.dataTransfer.getData(
                   "application/simstage-device",
                 );
-                const item = HARDWARE_CATALOG.find((i) => i.id === kind);
+                const item = store.api
+                  .getState()
+                  .catalog.find((i) => i.id === kind);
                 if (item) {
                   const point = canvas.current?.placementPoint(
                     e.clientX,

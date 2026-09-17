@@ -242,6 +242,11 @@ export function dimensions(kind: DeviceKind): [number, number, number] {
       matrix: [0.44, 0.08, 0.3],
       dsp: [0.44, 0.08, 0.3],
       power: [0.45, 0.1, 0.3],
+      extender: [0.2, 0.04, 0.15],
+      amplifier: [0.44, 0.09, 0.3],
+      network: [0.44, 0.04, 0.2],
+      control: [0.2, 0.1, 0.1],
+      codec: [0.3, 0.1, 0.2],
     } as const
   )[kind].slice() as [number, number, number];
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { DeviceStore, snapToSurface } from "../../src/workspace/DeviceStore";
-import { catalogDevice, ROOM } from "../../src/workspace/Catalog";
+import { catalogDevice, ROOM } from "../../src/workspace/LegacyCatalog";
 import { createWorkspace } from "../../src/workspace/createWorkspace";
 import {
   directSpl,

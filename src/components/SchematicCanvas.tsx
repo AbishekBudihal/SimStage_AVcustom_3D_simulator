@@ -342,7 +342,7 @@ export function SchematicCanvas({ store }: { store: DeviceStore }) {
                 })}
                 {!d.ports.length && (
                   <text x="14" y="78" fill="#8b9bac" fontSize="11">
-                    Passive enclosure · no signal ports
+                    Port definitions not supplied
                   </text>
                 )}
               </g>

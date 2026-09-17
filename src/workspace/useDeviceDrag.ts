@@ -6,7 +6,7 @@ import {
   type MountSurface,
   type XYZ,
 } from "./DeviceStore";
-import { allowedSurfaces } from "./Catalog";
+import { allowedSurfaces } from "./LegacyCatalog";
 
 /** Mounting-anchor drag, in metres. Returns an idempotent listener cleanup function.
  * The caller subscribes the canvas to the store; this controller never owns scene state.
@@ -127,7 +127,10 @@ export function useDeviceDrag(
     if (event.altKey) {
       let best:
         { surface: MountSurface; point: XYZ; distance: number } | undefined;
-      for (const surface of allowedSurfaces(device.kind)) {
+      for (const surface of store.api
+        .getState()
+        .catalog.find((p) => p.id === device.catalogId)?.surfaces ??
+        allowedSurfaces(device.kind)) {
         const anchor = snapToSurface(
           { x: 0, y: 0, z: 0 },
           surface,
