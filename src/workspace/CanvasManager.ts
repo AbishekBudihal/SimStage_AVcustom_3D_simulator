@@ -1,6 +1,10 @@
 import * as THREE from "three";
 import { SpatialAssets } from "./SpatialAssets";
-import type { FieldPoint, Audit } from "./Engineering";
+import {
+  visualRegionBoundary,
+  type FieldPoint,
+  type Audit,
+} from "./Engineering";
 import {
   snapToSurface,
   type PlacedDevice,
@@ -8,6 +12,7 @@ import {
   type DeviceState,
   type MountSurface,
   type XYZ,
+  type EngineeringSettings,
 } from "./DeviceStore";
 
 export type WorkspaceView = "plan" | "isometric" | "seat";
@@ -42,6 +47,7 @@ export class CanvasManager {
   private roomAssets = new SpatialAssets();
   private roomGroup: THREE.Group;
   private view: WorkspaceView = "isometric";
+  private visualBoundary: THREE.LineSegments | undefined;
   private visualOverlay: THREE.InstancedMesh | undefined;
   private readonly meshes = new Map<string, THREE.Mesh>();
   private readonly assets = new SpatialAssets();
@@ -80,6 +86,20 @@ export class CanvasManager {
     this.scene.add(new THREE.AmbientLight(0xffffff, 1.5));
     const light = new THREE.DirectionalLight(0xffffff, 2);
     light.position.set(4, 10, 6);
+    if (this.renderer.shadowMap) {
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    }
+    light.castShadow = true;
+    light.shadow.mapSize.set(1024, 1024);
+    Object.assign(light.shadow.camera, {
+      left: -20,
+      right: 20,
+      top: 20,
+      bottom: -20,
+      far: 80,
+    });
+    light.shadow.normalBias = 0.03;
     this.scene.add(light);
     // Even division count keeps the centre and every line on the 0.5 m lattice.
     const size = Math.ceil(Math.max(room.width, room.depth));
@@ -154,7 +174,7 @@ export class CanvasManager {
         ? "green"
         : seat.results.some((r) => r.pass)
           ? "yellow"
-          : seat.results.length
+          : seat.results.some((r) => r.status !== "unknown")
             ? "red"
             : "unknown";
       color.setHex(
@@ -172,6 +192,53 @@ export class CanvasManager {
     if (this.visualOverlay.instanceColor)
       this.visualOverlay.instanceColor.needsUpdate = true;
     this.visualOverlay.computeBoundingSphere();
+    this.invalidate();
+  }
+
+  setVisualCones(
+    visible: boolean,
+    devices: DeviceState["devices"],
+    settings: EngineeringSettings,
+  ): void {
+    if (this.disposed) return;
+    if (!visible) {
+      if (this.visualBoundary?.visible) {
+        this.visualBoundary.visible = false;
+        this.invalidate();
+      }
+      return;
+    }
+    const vertices = Object.values(devices)
+      .filter((d): d is PlacedDevice => !!d && d.kind === "display")
+      .flatMap((d) => visualRegionBoundary(d, settings, this.room));
+    if (!this.visualBoundary) {
+      this.visualBoundary = new THREE.LineSegments(
+        new THREE.BufferGeometry(),
+        new THREE.LineBasicMaterial({
+          color: 0x42c6f5,
+          transparent: true,
+          opacity: 0.8,
+          depthWrite: false,
+        }),
+      );
+      this.visualBoundary.name = "Calculated visual region boundaries";
+      this.scene.add(this.visualBoundary);
+    }
+    const geometry = this.visualBoundary.geometry;
+    const existing = geometry.getAttribute("position");
+    if (existing?.count === vertices.length / 3) {
+      (existing.array as Float32Array).set(vertices);
+      existing.needsUpdate = true;
+    } else {
+      geometry.dispose();
+      this.visualBoundary.geometry = new THREE.BufferGeometry();
+      this.visualBoundary.geometry.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(vertices, 3),
+      );
+    }
+    this.visualBoundary.geometry.computeBoundingSphere();
+    this.visualBoundary.visible = true;
     this.invalidate();
   }
 
@@ -467,6 +534,10 @@ export class CanvasManager {
     this.observer.disconnect();
     this.assets.dispose();
     this.roomAssets.dispose();
+    if (this.visualBoundary) {
+      this.visualBoundary.geometry.dispose();
+      (this.visualBoundary.material as THREE.Material).dispose();
+    }
     if (this.visualOverlay) {
       this.visualOverlay.geometry.dispose();
       (this.visualOverlay.material as THREE.Material).dispose();

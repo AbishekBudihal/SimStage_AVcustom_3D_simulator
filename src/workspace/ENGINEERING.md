@@ -82,12 +82,31 @@ frames; cached geometry and instanced overlays reduce allocation/draw calls.
 State is session-only. No cloud save, licensed certification or real-time acoustic
 measurement is implied by this implementation.
 
-## Manufacturer hardware and presets
+## Source catalog and parametric rooms
 
-`HardwareCatalog.ts` contains seven source-linked regional profiles: Samsung QM75C/QM85C, Shure MXA920-S US 24-inch, Q-SYS Core 8 Flex, Biamp TesiraFORTE X 400, Sony SRG-X400 and QSC AD-S6T. Dimensions follow each cited manufacturer sheet; Sony labels its dimensions approximate. Sources are available from each selected device's inspector. Unspecified connector subtypes are not invented. Specifications reviewed September 2026.
+The active catalog is `catalog.ts`, parsed from all 83 records in the five supplied `data/*.json` files. Original records, IDs, dimensions in metres, provenance and source descriptions remain available in the inspector. Explicit ports retain their IDs, direction, connector, transport and signal types. Display connectivity counts expand into sockets with the inference identified. Unspecified ports are not invented.
 
-Power labels preserve published on-mode, typical, maximum and upper-bound conditions. Heat derived from Watts uses 3.412142 BTU/h per Watt and is not measured thermal output. Biamp's <150 W includes exported PoE: simply summing it with downstream devices is conservative and may double-count. The passive QSC speaker adds no separate mains load; amplifier mains demand is not included. This is a planning BOM, not a circuit or HVAC design guarantee. User edits are labeled as overrides.
+The supplied records contain no structured electrical loads. Watts and BTU/h remain null until provided. JSON imports accept `powerWatts` and `heatBtuPerHour`, or `electrical.powerWatts` and `thermal.heatBtuPerHour`; one is never inferred from the other. Speaker power-rating strings are not interpreted as mains consumption. Sensitivity-based SPL starts with an explicit, editable 1 W assumption, with impedance and tap conditions unverified. The previous curated HardwareCatalog module is retained only for regression fixtures and is not an application catalog.
 
-Room presets are authoritative Zustand state: Huddle 4 x 3 x 2.7 m / 4 seats, Boardroom 8 x 6 x 3 m / 7 seats, Training 14 x 8 x 3.5 m / 24 seats and 12 tables. Switching scales mounting anchors then snaps them to the new surfaces, in one update. Device IDs, selection and graph endpoints persist. No collision or physical edge-clearance solver is implied.
+Import accepts arrays in the existing simulator schema, validates the entire batch, rejects duplicate IDs, and publishes atomically to Zustand. Existing placed device specifications remain immutable snapshots. Imports are session-only. User-defined placeholders are hidden by default and can be shown explicitly.
 
-The visual overlay uses instanced rings at seat coordinates: green within all checks, yellow when any limit is at least 90% utilized, red outside any limit, gray when no display exists. With multiple displays the best result is shown. Image-height overrides alter planning criteria; hardware envelope dimensions stay tied to the selected model. Room changes rebuild only room resources; overlays and device transforms update through the existing renderer.
+Room dimensions initialize from `createDefaultRoom()` in the supplied RoomModel (10 x 7 x 3.2 m). Width/length accept 3–30 m and height 2–8 m. Valid edits update the room and mounting anchors atomically; walls and ceiling move, table anchors reclamp, and device IDs and wires persist. Conference seats use 0.85 m spacing. Training rows/columns use 3.6 x 1.6 m bays and perimeter clearance. These are furniture planning assumptions, not accessibility certification.
+
+Visual seat markers and cyan viewing-region boundaries use the same live image height, orientation, content and angle checks. Boundaries sample the region at 0.25 m on the 1.2 m seating plane and project it onto the floor; they are discrete planning contours, not certified DISCAS boundaries. Unknown image heights produce no region. SPL samples use live speaker coordinates and room dimensions. All placed devices contribute; selection only controls the inspector.
+
+
+## Capacity and semantic placement
+
+Room state now accepts `roomType` and optional `capacity` (0–200). Eight semantic types map to meeting-table or teaching-desk layouts. Capacity is a request: seating stops at the available geometric capacity and the audit reports any shortfall. Presets populate editable fields only. A missing capacity retains automatic sizing. These spacing rules are design assumptions, not circulation/accessibility certification.
+
+Products added by clicking inventory or by schematic import without XYZ receive an automatic placement intent: mainDisplayWall, aboveMainDisplay, ceilingGrid, table, frontWall or rearRoom. Room changes and device edits solve these intents in one store publication. Moving, rotating or remounting a device marks it manual. Manual transforms survive resizing, even if now outside the envelope; the audit flags those positions. The inspector can explicitly reapply automatic placement. Escape restores the previous drag placement mode.
+
+Schematic JSON import adds nodes from existing catalog IDs and validates all endpoints transactionally before publishing. Format:
+
+```json
+{"nodes":[{"id":"display","catalogId":"samsung-qm75b"},{"id":"camera","catalogId":"yealink-uvc86"}],"connections":[{"from":{"deviceId":"camera","portId":"hdmi-out"},"to":{"deviceId":"display","portId":"hdmi-1"}}]}
+```
+
+Optional node `position` and `rotation` use XYZ objects in metres and radians and preserve explicit engineer transforms. Arbitrary schematic drawing/PDF formats are not parsed. This path uses the active DeviceStore; no AppState synchronization layer or second persistent model exists. Rack-unit metadata and straight-line cable estimates remain available; rack allocation and installation cable routing have not been added.
+
+The procedural room includes a downward-facing ceiling (open from above), dimension-driven ceiling lights, floor seams, furniture groups and demand-rendered shadows. No static room model is loaded. There is no full collision solver or guarantee that equipment footprints cannot overlap.

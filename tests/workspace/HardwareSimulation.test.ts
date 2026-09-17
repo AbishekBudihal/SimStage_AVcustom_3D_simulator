@@ -63,7 +63,7 @@ describe("manufacturer profiles and room presets", () => {
       );
     next.setRoomPreset("huddle");
     expect(roomLayout(store.api.getState().room).seats).toHaveLength(4);
-    expect(old.room.width).toBe(8);
+    expect(old.room.width).toBe(10);
     unsub();
   });
   it("snaps to the nearest training table without leaving its bounds", () => {

@@ -125,7 +125,8 @@ export function catalogDevice(
   index: number,
   point?: XYZ,
 ): NewDevice {
-  const item = CATALOG.find((item) => item.kind === kind)!;
+  const item = CATALOG.find((item) => item.kind === kind);
+  if (!item) throw new Error("Unknown legacy fixture");
   return {
     catalogId: `generic-${kind}`,
     kind,

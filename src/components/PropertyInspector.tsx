@@ -5,8 +5,8 @@ import {
   type RoomSize,
   type MountSurface,
 } from "../workspace/DeviceStore";
-import { allowedSurfaces } from "../workspace/Catalog";
-import { HARDWARE_CATALOG } from "../workspace/HardwareCatalog";
+import { allowedSurfaces } from "../workspace/LegacyCatalog";
+
 const button =
   "rounded-md border border-solid border-slate-600 bg-slate-800 px-3 py-2 text-xs text-slate-200 hover:bg-slate-700";
 export function PropertyInspector({
@@ -16,6 +16,7 @@ export function PropertyInspector({
   store: DeviceStore;
   room: RoomSize;
 }) {
+  const catalog = useStore(store.api, (state) => state.catalog);
   const selected = useStore(store.api, (state) =>
     state.selectedId ? state.devices[state.selectedId] : undefined,
   );
@@ -28,7 +29,7 @@ export function PropertyInspector({
         </p>
       </section>
     );
-  const profile = HARDWARE_CATALOG.find((p) => p.id === selected.catalogId);
+  const profile = catalog.find((p) => p.id === selected.catalogId);
   const wall = !["floor", "ceiling", "table"].includes(selected.surface);
   const degrees = ((((selected.rotation.y * 180) / Math.PI) % 360) + 360) % 360;
   const shift = (delta: number) =>
@@ -47,7 +48,22 @@ export function PropertyInspector({
     >
       <h3>Device inspector</h3>
       <strong className="text-sm">{selected.metadata.label}</strong>
-      <p className="text-xs text-slate-400">{selected.surface} mount</p>
+      <p className="text-xs text-slate-400">
+        {selected.surface} mount · {selected.placement?.mode ?? "manual"}{" "}
+        placement
+      </p>
+      {selected.placement && (
+        <button
+          className={button}
+          onClick={() =>
+            store.update(selected.id, {
+              placement: { ...selected.placement!, mode: "auto" },
+            })
+          }
+        >
+          Reapply {selected.placement.intent}
+        </button>
+      )}
       {profile && (
         <details className="engineering-settings">
           <summary>Hardware specifications & sources</summary>
@@ -65,23 +81,21 @@ export function PropertyInspector({
             Heat: {selected.metadata.heatBasis}
           </p>
           <p className="muted fine-print">{profile.notes}</p>
-          {profile.sources.map((source, i) => (
-            <p key={source}>
-              <a
-                className="text-xs text-sky-300"
-                href={source}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Manufacturer reference {i + 1}
-              </a>
-            </p>
-          ))}
+          <p className="muted fine-print">
+            {profile.sourceFile} · {profile.provenance}
+          </p>
+          <p className="muted fine-print">{profile.source}</p>
+          <details>
+            <summary className="text-xs">Original catalog record</summary>
+            <pre className="overflow-auto text-xs">
+              {JSON.stringify(profile.raw, null, 2)}
+            </pre>
+          </details>
         </details>
       )}
       {selected.metadata.sensitivityDb !== undefined && (
         <label className="engineering-input">
-          <span>Amplifier drive (W, 8 ohm bypass)</span>
+          <span>Assumed amplifier drive (W)</span>
           <input
             aria-label="Amplifier drive watts"
             type="number"
@@ -116,11 +130,13 @@ export function PropertyInspector({
             });
           }}
         >
-          {allowedSurfaces(selected.kind).map((surface) => (
-            <option key={surface} value={surface}>
-              {surface}
-            </option>
-          ))}
+          {(profile?.surfaces ?? allowedSurfaces(selected.kind)).map(
+            (surface) => (
+              <option key={surface} value={surface}>
+                {surface}
+              </option>
+            ),
+          )}
         </select>
       </label>
       <div className="my-4 grid grid-cols-3 gap-2">
