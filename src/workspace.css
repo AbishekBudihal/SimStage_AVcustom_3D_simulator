@@ -709,3 +709,63 @@ h3 {
 .canvas-host canvas {
   image-rendering: auto;
 }
+.catalog-card {
+  border: 1px solid #344152;
+  border-radius: 8px;
+  padding: 8px;
+  background: #18202b;
+}
+.catalog-card .inventory-button {
+  width: 100%;
+  border: 0;
+  padding: 5px;
+}
+.catalog-card details {
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.optical-analysis {
+  padding: 12px 0;
+  border-bottom: 1px solid #344152;
+  font-size: 12px;
+}
+.optical-analysis label,
+.engineering-settings form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 8px 0;
+}
+.optical-analysis input,
+.optical-analysis select,
+.engineering-settings form input,
+.engineering-settings form select,
+.engineering-settings textarea {
+  width: 100%;
+  min-width: 0;
+  background: #151d28;
+  color: #e7ebf1;
+  padding: 6px;
+  border: 1px solid #45556a;
+  border-radius: 4px;
+}
+.seat-results {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  max-height: 180px;
+  overflow: auto;
+  gap: 4px;
+}
+.seat-results button {
+  background: #233044;
+  color: #e7ebf1;
+  border: 1px solid #42536a;
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 5px;
+}
+.seat-results button[aria-pressed="true"] {
+  background: #245a97;
+  border-color: #94d7ff;
+}

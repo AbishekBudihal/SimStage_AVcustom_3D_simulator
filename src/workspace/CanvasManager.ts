@@ -1,3 +1,5 @@
+import { eyeHeight } from "./RoomLayout";
+import type { OpticalResult } from "./OpticalEngineering";
 import { SpatialOverlays, type WorkspaceMode } from "./SpatialOverlays";
 import { ViewportNavigation, orthographicFit } from "./ViewportNavigation";
 import * as THREE from "three";
@@ -442,9 +444,18 @@ export class CanvasManager {
     state: DeviceState,
     filter = "All",
     selectedCable: string | null = null,
+    optical?: OpticalResult,
+    selectedSeat?: string | null,
   ): void {
     if (this.disposed) return;
-    this.overlays?.update(mode, state, filter, selectedCable);
+    this.overlays?.update(
+      mode,
+      state,
+      filter,
+      selectedCable,
+      optical,
+      selectedSeat,
+    );
     this.invalidate();
   }
   setView(view: WorkspaceView, _animate = true): void {
@@ -455,7 +466,7 @@ export class CanvasManager {
     const centre = new THREE.Vector3(0, this.room.height / 2, 0);
     if (view === "seat") {
       this.activeCamera = this.seatCamera;
-      const eye = Math.min(1.2, this.room.height * 0.8);
+      const eye = eyeHeight(this.room);
       this.camera.position.set(0, eye, this.room.depth * 0.3);
       this.target.set(0, eye, -this.room.depth / 2);
     } else {

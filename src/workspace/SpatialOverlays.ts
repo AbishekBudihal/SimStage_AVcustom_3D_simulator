@@ -1,6 +1,6 @@
+import type { OpticalResult } from "./OpticalEngineering";
 import * as T from "three";
 import type { DeviceState, RoomSize, XYZ } from "./DeviceStore";
-import { surfaceYaw } from "./SpatialAssets";
 export type WorkspaceMode =
   | "overview"
   | "measurements"
@@ -142,8 +142,68 @@ export class SpatialOverlays {
     state: DeviceState,
     filter: string,
     selected: string | null,
+    optical?: OpticalResult,
+    selectedSeat?: string | null,
   ) {
     this.clear();
+    if ((mode === "camera" || mode === "display") && optical) {
+      for (const points of optical.segments) this.line(points, 0x6dd9ff);
+      this.line(
+        [
+          optical.origin,
+          {
+            x: optical.origin.x + optical.direction.x,
+            y: optical.origin.y + optical.direction.y,
+            z: optical.origin.z + optical.direction.z,
+          },
+        ],
+        0xffffff,
+      );
+      for (const face of optical.faces) {
+        const vertices: number[] = [];
+        for (let i = 1; i + 1 < face.length; i++)
+          for (const p of [face[0], face[i], face[i + 1]])
+            vertices.push(p.x, p.y, p.z);
+        const geometry = new T.BufferGeometry();
+        geometry.setAttribute(
+          "position",
+          new T.Float32BufferAttribute(vertices, 3),
+        );
+        this.group.add(
+          new T.Mesh(
+            geometry,
+            new T.MeshBasicMaterial({
+              color: 0x48b7ee,
+              transparent: true,
+              opacity: 0.08,
+              side: T.DoubleSide,
+              depthWrite: false,
+            }),
+          ),
+        );
+      }
+      for (const seat of optical.seats) {
+        const color = {
+          inside: 0x26d99a,
+          outside: 0xf45363,
+          unknown: 0x718096,
+          warning: 0xffc857,
+        }[seat.status];
+        const marker = new T.Mesh(
+          new T.SphereGeometry(seat.id === selectedSeat ? 0.13 : 0.08, 12, 8),
+          new T.MeshBasicMaterial({ color, depthTest: false }),
+        );
+        marker.position.set(seat.position.x, seat.position.y, seat.position.z);
+        marker.renderOrder = 12;
+        this.group.add(marker);
+        if (mode === "display" || seat.id === selectedSeat)
+          this.line(
+            [optical.origin, seat.position],
+            seat.id === selectedSeat ? 0xffffff : color,
+          );
+      }
+      return;
+    }
     if (mode === "measurements")
       for (const m of measurements(state.room)) {
         this.line([m.a, m.b], 0x70d9f4);
@@ -184,83 +244,31 @@ export class SpatialOverlays {
             c.id,
           );
         }
-    if (mode === "camera" || mode === "microphone")
+    if (mode === "microphone")
       for (const d of Object.values(state.devices)) {
-        if (!d || d.kind !== (mode === "camera" ? "ptz_camera" : "ceiling_mic"))
+        if (!d || d.kind !== "ceiling_mic") continue;
+        const raw = state.catalog.find((p) => p.id === d.catalogId)?.raw
+          .microphone as Record<string, unknown> | undefined;
+        const radius = raw?.pickupRadiusM;
+        if (
+          typeof radius !== "number" ||
+          !Number.isFinite(radius) ||
+          radius <= 0
+        )
           continue;
-        const raw = state.catalog.find((p) => p.id === d.catalogId)?.raw;
-        const spec = raw?.[mode === "camera" ? "camera" : "microphone"] as
-          Record<string, unknown> | undefined;
-        if (!spec) continue;
-        if (mode === "microphone") {
-          const radius = spec.pickupRadiusM;
-          if (
-            typeof radius !== "number" ||
-            !Number.isFinite(radius) ||
-            radius <= 0
-          )
-            continue;
-          const y = Math.min(1.2, state.room.height),
-            points = Array.from({ length: 65 }, (_, i) => ({
-              x: d.position.x + radius * Math.cos((i * Math.PI) / 32),
-              y,
-              z: d.position.z + radius * Math.sin((i * Math.PI) / 32),
-            }));
-          this.line(points, 0x77e6bc);
-          this.line(
-            [d.position, { x: d.position.x, y, z: d.position.z }],
-            0x77e6bc,
-          );
-        } else {
-          const hfov = spec.horizontalFovDeg,
-            vfov = spec.verticalFovDeg;
-          if (
-            typeof hfov !== "number" ||
-            !Number.isFinite(hfov) ||
-            hfov <= 0 ||
-            hfov >= 180
-          )
-            continue;
-          const distance = Math.min(
-            6,
-            Math.hypot(state.room.width, state.room.depth),
-          );
-          const q = new T.Quaternion()
-            .setFromEuler(new T.Euler(d.rotation.x, d.rotation.y, d.rotation.z))
-            .multiply(
-              new T.Quaternion().setFromAxisAngle(
-                new T.Vector3(0, 1, 0),
-                surfaceYaw(d.surface),
-              ),
-            );
-          const point = (angle: number, vertical: number) =>
-            new T.Vector3(
-              Math.tan((angle * Math.PI) / 180) * distance,
-              Math.tan((vertical * Math.PI) / 180) * distance,
-              distance,
-            )
-              .applyQuaternion(q)
-              .add(vector(d.position));
-          if (
-            typeof vfov === "number" &&
-            Number.isFinite(vfov) &&
-            vfov > 0 &&
-            vfov < 180
-          ) {
-            const corners = [
-              point(-hfov / 2, -vfov / 2),
-              point(hfov / 2, -vfov / 2),
-              point(hfov / 2, vfov / 2),
-              point(-hfov / 2, vfov / 2),
-            ];
-            this.line([...corners, corners[0]], 0x6dd9ff);
-            for (const p of corners) this.line([d.position, p], 0x6dd9ff);
-          } else
-            this.line(
-              [d.position, point(-hfov / 2, 0), point(hfov / 2, 0), d.position],
-              0x6dd9ff,
-            );
-        }
+        const y = Math.min(1.2, state.room.height);
+        this.line(
+          Array.from({ length: 65 }, (_, i) => ({
+            x: d.position.x + radius * Math.cos((i * Math.PI) / 32),
+            y,
+            z: d.position.z + radius * Math.sin((i * Math.PI) / 32),
+          })),
+          0x77e6bc,
+        );
+        this.line(
+          [d.position, { x: d.position.x, y, z: d.position.z }],
+          0x77e6bc,
+        );
       }
   }
   private clear() {

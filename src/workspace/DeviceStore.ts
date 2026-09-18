@@ -35,6 +35,8 @@ export interface DevicePort {
   readonly notes?: string;
 }
 export interface DeviceMetadata {
+  readonly horizontalFovDeg?: number;
+  readonly verticalFovDeg?: number;
   readonly label: string;
   readonly powerWatts: number | null;
   readonly heatBtuPerHour: number | null;
@@ -71,6 +73,7 @@ export type DeviceUpdate = Partial<
   readonly metadata?: Partial<DeviceMetadata>;
 };
 export interface RoomSize {
+  readonly eyeHeightM?: number;
   readonly capacity?: number;
   readonly roomType?: RoomType;
   readonly width: number;
@@ -162,6 +165,13 @@ function freezeDevice(input: PlacedDevice): PlacedDevice {
       input.metadata.coverageDegrees > 360)
   )
     throw new Error("Invalid coverage angle");
+  for (const fov of [
+    input.metadata.horizontalFovDeg,
+    input.metadata.verticalFovDeg,
+  ]) {
+    if (fov !== undefined && (!Number.isFinite(fov) || fov <= 0 || fov >= 180))
+      throw new Error("FOV must be greater than 0 and less than 180 degrees");
+  }
   if (
     input.metadata.imageHeightM !== undefined &&
     (!Number.isFinite(input.metadata.imageHeightM) ||
@@ -242,6 +252,10 @@ export function createDeviceStore(): StoreApi<DeviceState> {
         });
       if (
         ![room.width, room.depth, room.height].every(Number.isFinite) ||
+        (room.eyeHeightM !== undefined &&
+          (!Number.isFinite(room.eyeHeightM) ||
+            room.eyeHeightM < 0.5 ||
+            room.eyeHeightM > room.height)) ||
         (room.capacity !== undefined &&
           (!Number.isInteger(room.capacity) ||
             room.capacity < 0 ||
@@ -259,6 +273,7 @@ export function createDeviceStore(): StoreApi<DeviceState> {
       )
         throw new Error("Room requires width/length 3–30 m and height 2–8 m");
       if (
+        room.eyeHeightM === state.room.eyeHeightM &&
         room.width === state.room.width &&
         room.depth === state.room.depth &&
         room.height === state.room.height &&

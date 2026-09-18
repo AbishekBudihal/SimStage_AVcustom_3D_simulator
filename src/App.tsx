@@ -1,3 +1,5 @@
+import { OpticalAnalysisPanel } from "./components/OpticalAnalysisPanel";
+import { cameraCoverage, displayViewing } from "./workspace/OpticalEngineering";
 import { cableRoutes, type WorkspaceMode } from "./workspace/SpatialOverlays";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "zustand";
@@ -34,6 +36,39 @@ export default function App() {
   const [mode, setMode] = useState<WorkspaceMode>("overview"),
     [cableFilter, setCableFilter] = useState("All"),
     [selectedCable, setSelectedCable] = useState<string | null>(null);
+  const [analysisIds, setAnalysisIds] = useState<{
+    camera?: string;
+    display?: string;
+  }>({});
+  useEffect(() => {
+    const d = selectedId ? devices[selectedId] : undefined;
+    const kind =
+      d?.kind === "ptz_camera"
+        ? "camera"
+        : d?.kind === "display"
+          ? "display"
+          : null;
+    if (kind && d)
+      setAnalysisIds((ids) =>
+        ids[kind] === d.id ? ids : { ...ids, [kind]: d.id },
+      );
+  }, [selectedId, devices]);
+  const [selectedSeat, setSelectedSeat] = useState<string | null>(null);
+  const optical = useMemo(() => {
+    if (mode !== "camera" && mode !== "display") return undefined;
+    const candidates = Object.values(devices).filter(
+      (d) => d?.kind === (mode === "camera" ? "ptz_camera" : "display"),
+    );
+    const device =
+      candidates.find((d) => d?.id === selectedId) ??
+      candidates.find((d) => d?.id === analysisIds[mode]) ??
+      candidates[0];
+    return device
+      ? mode === "camera"
+        ? cameraCoverage(device, room)
+        : displayViewing(device, store.api.getState())
+      : undefined;
+  }, [mode, devices, selectedId, analysisIds, room, settings, store]);
   const routes = useMemo(
     () => cableRoutes(store.api.getState()),
     [devices, connections, room, store],
@@ -81,15 +116,19 @@ export default function App() {
   useEffect(() => {
     const manager = canvas.current;
     manager?.setHeatmap(mode === "speaker" ? "spl" : "off", audit.field);
-    manager?.setVisualOverlay(mode === "display", audit.visual);
-    manager?.setVisualCones(mode === "display", devices, settings);
+    manager?.setVisualOverlay(false, audit.visual);
+    manager?.setVisualCones(false, devices, settings);
     manager?.setWorkspaceMode(
       mode,
       store.api.getState(),
       cableFilter,
       selectedCable,
+      optical,
+      selectedSeat,
     );
   }, [
+    optical,
+    selectedSeat,
     audit,
     mode,
     ready,
@@ -245,9 +284,9 @@ export default function App() {
             )}
             {mode === "camera" && (
               <div className="mode-note">
-                Catalog FOV guides, up to 6 m preview depth (not rated range).
-                Missing VFOV shows horizontal angles only; missing HFOV shows no
-                guide. Pan/tilt uses device rotation.
+                Room-clipped geometric FOV, not rated imaging range. Missing
+                VFOV gives Unknown full coverage; missing HFOV shows no guide.
+                Pan/tilt uses device rotation.
               </div>
             )}
             {mode === "microphone" && (
@@ -331,6 +370,15 @@ export default function App() {
         <aside className="panel status-panel" aria-label="System health">
           <p className="eyebrow">LIVE ENGINEERING</p>
           <h2>Design health</h2>
+          {(mode === "camera" || mode === "display") && (
+            <OpticalAnalysisPanel
+              store={store}
+              mode={mode}
+              result={optical}
+              selectedSeat={selectedSeat}
+              selectSeat={setSelectedSeat}
+            />
+          )}
           <EngineeringPanel store={store} audit={audit} />
           <PropertyInspector store={store} room={room} />
           <p className="session-note">
