@@ -1,3 +1,4 @@
+import type { CatalogCategory } from "./CatalogQuery";
 import { defaultIntent } from "./PlacementSolver";
 import displays from "../../data/displays.json";
 import cameras from "../../data/cameras.json";
@@ -19,7 +20,7 @@ export interface CatalogProfile {
   readonly id: string;
   readonly manufacturer: string;
   readonly model: string;
-  readonly category: string;
+  readonly category: CatalogCategory | "source";
   readonly kind: DeviceKind;
   readonly dimensions: XYZ;
   readonly surface: MountSurface;
@@ -58,6 +59,9 @@ function freeze<T>(value: T): T {
   return value;
 }
 const kinds: Record<string, DeviceKind> = {
+  projector: "source",
+  av_over_ip: "extender",
+  custom: "source",
   display: "display",
   camera: "ptz_camera",
   microphone: "ceiling_mic",
@@ -88,7 +92,8 @@ export function parseCatalog(
         id = string(raw.id, "id");
       if (ids.has(id)) throw new Error(`Duplicate catalog ID: ${id}`);
       ids.add(id);
-      const category = string(raw.category, "category"),
+      const category = string(raw.category, "category") as
+          CatalogCategory | "source",
         kind = kinds[category];
       if (!Object.prototype.hasOwnProperty.call(kinds, category))
         throw new Error(`${id}: unsupported category ${category}`);
@@ -105,6 +110,15 @@ export function parseCatalog(
         mic = optionalRecord(raw.microphone),
         camera = optionalRecord(raw.camera),
         display = optionalRecord(raw.display);
+      for (const field of [
+        "horizontalFovDeg",
+        "verticalFovDeg",
+        "diagonalFovDeg",
+      ]) {
+        const value = number(camera[field], field);
+        if (value !== undefined && (value <= 0 || value >= 180))
+          throw new Error(`${id}: invalid ${field}`);
+      }
       const declared = speaker.mount ?? mic.mount ?? camera.mount;
       const surfaces: MountSurface[] = [];
       if (mounting.wall === true || declared === "wall")
@@ -259,6 +273,8 @@ export function parseCatalog(
           powerWatts: watts,
           heatBtuPerHour: heat,
           rackUnits: number(raw.rackUnits, "rackUnits") ?? null,
+          horizontalFovDeg: number(camera.horizontalFovDeg, "HFOV"),
+          verticalFovDeg: number(camera.verticalFovDeg, "VFOV"),
           imageHeightM,
           sensitivityDb,
           coverageDegrees,

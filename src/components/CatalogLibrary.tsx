@@ -1,3 +1,12 @@
+import { CustomProduct } from "./CustomProduct";
+import {
+  CATEGORIES,
+  catalogCategory,
+  filterCatalog,
+  opticalMetadata,
+  specificationText,
+  type CatalogCategory,
+} from "../workspace/CatalogQuery";
 import { useState } from "react";
 import { useStore } from "zustand";
 import type { DeviceStore } from "../workspace/DeviceStore";
@@ -12,17 +21,10 @@ export function CatalogLibrary({
 }) {
   const catalog = useStore(store.api, (s) => s.catalog);
   const [query, setQuery] = useState(""),
-    [placeholders, setPlaceholders] = useState(false),
-    [category, setCategory] = useState("All"),
+    [manufacturer, setManufacturer] = useState("All"),
+    [category, setCategory] = useState<CatalogCategory | "All">("camera"),
     [message, setMessage] = useState("");
-  const products = catalog.filter(
-    (p) =>
-      (category === "All" || p.category === category) &&
-      (placeholders || p.provenance !== "user_defined") &&
-      `${p.manufacturer} ${p.model} ${p.category}`
-        .toLowerCase()
-        .includes(query.toLowerCase()),
-  );
+  const products = filterCatalog(catalog, { query, category, manufacturer });
   return (
     <>
       <h1>Simulator catalog</h1>
@@ -35,18 +37,15 @@ export function CatalogLibrary({
         <select
           aria-label="AV category"
           value={category}
-          onChange={(e) => setCategory(e.target.value)}
+          onChange={(e) =>
+            setCategory(e.target.value as CatalogCategory | "All")
+          }
         >
           <option>All</option>
-          {[...new Set(catalog.map((p) => p.category))].sort().map((c) => (
-            <option key={c} value={c}>
-              {c === "matrix" || c === "switcher"
-                ? "Switchers / Matrices"
-                : c === "extender"
-                  ? "Extenders / Converters"
-                  : c === "dsp"
-                    ? "DSP"
-                    : c[0].toUpperCase() + c.slice(1)}
+          {Object.entries(CATEGORIES).map(([id, label]) => (
+            <option key={id} value={id}>
+              {label} ({catalog.filter((p) => catalogCategory(p) === id).length}
+              )
             </option>
           ))}
         </select>
@@ -59,14 +58,27 @@ export function CatalogLibrary({
           onChange={(e) => setQuery(e.target.value)}
         />
       </label>
-      <label className="muted fine-print">
-        <input
-          type="checkbox"
-          checked={placeholders}
-          onChange={(e) => setPlaceholders(e.target.checked)}
-        />{" "}
-        Include user-defined placeholders
+      <label className="engineering-input">
+        <span>Manufacturer</span>
+        <select
+          aria-label="Manufacturer"
+          value={manufacturer}
+          onChange={(e) => setManufacturer(e.target.value)}
+        >
+          <option>All</option>
+          {[...new Set(catalog.map((p) => p.manufacturer))].sort().map((m) => (
+            <option key={m}>{m}</option>
+          ))}
+        </select>
       </label>
+      <CustomProduct
+        store={store}
+        onAdded={() => {
+          setCategory("All");
+          setManufacturer("All");
+          setQuery("");
+        }}
+      />
       <label className="engineering-input">
         <span>Import catalog JSON</span>
         <input
@@ -98,32 +110,60 @@ export function CatalogLibrary({
       )}
       <div className="inventory-list">
         {products.map((item) => (
-          <button
-            key={item.id}
-            draggable={ready}
-            disabled={!ready}
-            className="inventory-button"
-            onClick={() => spawn(item.id)}
-            onDragStart={(e) => {
-              e.dataTransfer.setData("application/simstage-device", item.id);
-              e.dataTransfer.effectAllowed = "copy";
-            }}
-          >
-            <span>
-              <strong>
-                {item.manufacturer} {item.model}
-              </strong>
-              <small>
-                {item.category} · {item.provenance}
-              </small>
-              <small>
-                {item.ports.length
-                  ? `${item.ports.length} declared ports`
-                  : "Ports unspecified"}
-              </small>
-            </span>
-            <span aria-hidden="true">+</span>
-          </button>
+          <article key={item.id} className="catalog-card">
+            <button
+              key={item.id}
+              draggable={ready}
+              disabled={!ready}
+              className="inventory-button"
+              onClick={() => spawn(item.id)}
+              onDragStart={(e) => {
+                e.dataTransfer.setData("application/simstage-device", item.id);
+                e.dataTransfer.effectAllowed = "copy";
+              }}
+            >
+              <span>
+                <strong>
+                  {item.manufacturer} {item.model}
+                </strong>
+                <small>
+                  {item.category} · {item.provenance}
+                </small>
+                <small>
+                  {item.ports.length
+                    ? `${item.ports.length} declared ports`
+                    : "Ports unspecified"}
+                </small>
+              </span>
+              <span>Add to Room</span>
+            </button>
+            <details>
+              <summary>Product details</summary>
+              <p>
+                {item.dimensions.x} × {item.dimensions.y} × {item.dimensions.z}{" "}
+                m
+              </p>
+              <p>Mounting: {item.surfaces.join(", ")}</p>
+              <p>
+                Power {specificationText(item.metadata.powerWatts)} W · Heat{" "}
+                {specificationText(item.metadata.heatBtuPerHour)} BTU/h
+              </p>
+              {(item.kind === "ptz_camera" || item.kind === "display") &&
+                Object.entries(opticalMetadata(item)).map(([key, value]) => (
+                  <div key={key}>
+                    {key}: {specificationText(value)}
+                  </div>
+                ))}
+              <p>
+                {item.ports
+                  .map((p) => `${p.label} (${p.direction}, ${p.signal})`)
+                  .join(" · ") || "Ports Unknown"}
+              </p>
+              <p>
+                {item.provenance}: {item.source}
+              </p>
+            </details>
+          </article>
         ))}
       </div>
       {!products.length && (

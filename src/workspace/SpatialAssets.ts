@@ -1,3 +1,4 @@
+import { mountYaw as surfaceYaw } from "./OpticalTransform";
 import * as T from "three";
 import type {
   DeviceKind,
@@ -271,15 +272,7 @@ export class SpatialAssets {
     this.materials.clear();
   }
 }
-export function surfaceYaw(surface: MountSurface): number {
-  return surface === "south"
-    ? Math.PI
-    : surface === "east"
-      ? -Math.PI / 2
-      : surface === "west"
-        ? Math.PI / 2
-        : 0;
-}
+export { mountYaw as surfaceYaw } from "./OpticalTransform";
 export function dimensions(kind: DeviceKind): [number, number, number] {
   return (
     {

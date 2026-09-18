@@ -28,7 +28,7 @@ export function ViewportHUD({
           aria-pressed={view === mode}
           title={
             mode === "seat"
-              ? "Start at seated-eye perspective at 1.2 m, facing the front wall"
+              ? "Start at configured seated-eye height, facing the front wall"
               : label
           }
           onClick={() => onChange(mode)}

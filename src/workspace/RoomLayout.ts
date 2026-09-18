@@ -1,3 +1,6 @@
+export const DEFAULT_EYE_HEIGHT_M = 1.2;
+export const eyeHeight = (room: RoomSize) =>
+  room.eyeHeightM ?? DEFAULT_EYE_HEIGHT_M;
 import type { RoomSize, XYZ } from "./DeviceStore";
 export interface TableBounds {
   x: number;
@@ -34,7 +37,7 @@ export function roomLayout(room: RoomSize) {
         for (const [seat, offset] of [-0.6, 0.6].entries())
           seats.push({
             id: `T${row + 1}-${column + 1}${seat ? "B" : "A"}`,
-            position: { x: x + offset, y: 1.2, z: z + 0.65 },
+            position: { x: x + offset, y: eyeHeight(room), z: z + 0.65 },
             rotation: Math.PI,
           });
       }
@@ -51,12 +54,12 @@ export function roomLayout(room: RoomSize) {
       const z = (i - (perSide - 1) / 2) * 0.85;
       seats.push({
         id: `L${i + 1}`,
-        position: { x: -tableWidth / 2 - 0.55, y: 1.2, z },
+        position: { x: -tableWidth / 2 - 0.55, y: eyeHeight(room), z },
         rotation: Math.PI / 2,
       });
       seats.push({
         id: `R${i + 1}`,
-        position: { x: tableWidth / 2 + 0.55, y: 1.2, z },
+        position: { x: tableWidth / 2 + 0.55, y: eyeHeight(room), z },
         rotation: -Math.PI / 2,
       });
     }
@@ -64,7 +67,7 @@ export function roomLayout(room: RoomSize) {
       id: "Back",
       position: {
         x: 0,
-        y: 1.2,
+        y: eyeHeight(room),
         z: Math.min(room.depth / 2 - 0.3, tableDepth / 2 + 0.6),
       },
       rotation: Math.PI,
@@ -72,7 +75,7 @@ export function roomLayout(room: RoomSize) {
     if (room.layout === "huddle")
       seats.push({
         id: "Front",
-        position: { x: 0, y: 1.2, z: -tableDepth / 2 - 0.55 },
+        position: { x: 0, y: eyeHeight(room), z: -tableDepth / 2 - 0.55 },
         rotation: 0,
       });
   }
@@ -134,7 +137,11 @@ function capacityLayout(room: RoomSize) {
       for (let j = 0; j < 2 && seats.length < count; j++)
         seats.push({
           id: `Seat ${seats.length + 1}`,
-          position: { x: x + (j ? 0.6 : -0.6), y: 1.2, z: z + 0.65 },
+          position: {
+            x: x + (j ? 0.6 : -0.6),
+            y: eyeHeight(room),
+            z: z + 0.65,
+          },
           rotation: Math.PI,
         });
     }
@@ -156,7 +163,7 @@ function capacityLayout(room: RoomSize) {
         id: `Seat ${i + 1}`,
         position: {
           x: (i % 2 ? 1 : -1) * (tableWidth / 2 + 0.55),
-          y: 1.2,
+          y: eyeHeight(room),
           z: (Math.floor(i / 2) - (perSide - 1) / 2) * 0.85,
         },
         rotation: i % 2 ? -Math.PI / 2 : Math.PI / 2,
@@ -164,7 +171,11 @@ function capacityLayout(room: RoomSize) {
     for (let i = 0; i < Math.min(2, count); i++)
       seats.push({
         id: i ? "Front" : "Back",
-        position: { x: 0, y: 1.2, z: (i ? -1 : 1) * (tableDepth / 2 + 0.55) },
+        position: {
+          x: 0,
+          y: eyeHeight(room),
+          z: (i ? -1 : 1) * (tableDepth / 2 + 0.55),
+        },
         rotation: i ? 0 : Math.PI,
       });
   }

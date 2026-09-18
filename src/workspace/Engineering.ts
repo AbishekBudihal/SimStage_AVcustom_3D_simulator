@@ -1,3 +1,4 @@
+import { screenOrigin, orientation } from "./OpticalTransform";
 import * as T from "three";
 import type {
   DeviceState,
@@ -6,8 +7,8 @@ import type {
   RoomSize,
   XYZ,
 } from "./DeviceStore";
-import { roomLayout } from "./RoomLayout";
-import { surfaceYaw } from "./SpatialAssets";
+import { roomLayout, eyeHeight } from "./RoomLayout";
+import { mountYaw as surfaceYaw } from "./OpticalTransform";
 import { summarizeBom } from "./BomSummary";
 const radToDeg = 180 / Math.PI;
 export function visualCheck(
@@ -18,29 +19,12 @@ export function visualCheck(
   return visualEvaluator(display, settings)(seat);
 }
 function visualEvaluator(display: PlacedDevice, settings: EngineeringSettings) {
-  const quaternion = new T.Quaternion().setFromEuler(
-    new T.Euler(
-      display.rotation.x,
-      display.rotation.y,
-      display.rotation.z,
-      "XYZ",
-    ),
-  );
-  quaternion.multiply(
-    new T.Quaternion().setFromAxisAngle(
-      new T.Vector3(0, 1, 0),
-      surfaceYaw(display.surface),
-    ),
-  );
-  quaternion.invert();
+  const quaternion = orientation(display).invert();
   const relative = new T.Vector3();
+  const origin = screenOrigin(display);
   return (seat: XYZ) => {
     relative
-      .set(
-        seat.x - display.position.x,
-        seat.y - display.position.y,
-        seat.z - display.position.z,
-      )
+      .set(seat.x - origin.x, seat.y - origin.y, seat.z - origin.z)
       .applyQuaternion(quaternion);
     const height = display.metadata.imageHeightM ?? 0;
     const distance = Math.hypot(relative.x, relative.z);
@@ -184,7 +168,7 @@ export function visualRegionBoundary(
       cells[z * cols + x] = Number(
         check({
           x: -room.width / 2 + (x + 0.5) * dx,
-          y: 1.2,
+          y: eyeHeight(room),
           z: -room.depth / 2 + (z + 0.5) * dz,
         }).pass,
       );
@@ -225,7 +209,7 @@ export function engineeringAudit(state: DeviceState, room: RoomSize) {
   const field: FieldPoint[] = [];
   for (let z = -room.depth / 2 + 0.25; z < room.depth / 2; z += 0.5)
     for (let x = -room.width / 2 + 0.25; x < room.width / 2; x += 0.5) {
-      const spl = directSpl(speakers, { x, y: 1.2, z });
+      const spl = directSpl(speakers, { x, y: eyeHeight(room), z });
       field.push({
         x,
         z,
