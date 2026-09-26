@@ -317,19 +317,36 @@ export class SpatialAssets {
     );
     carpet.material = this.finish("fabric", 0x78858a);
     group.add(carpet);
-    for (const table of layout.tables) {
-      const top = this.rounded(
+    for (const [index, table] of layout.tables.entries()) {
+      const tableGroup = new T.Group();
+      tableGroup.userData.furnitureId = `table:${index}`;
+      tableGroup.userData.dimensions = { ...table };
+      furniture.add(tableGroup);
+      const topColor =
+        room.table?.finish === "walnut"
+          ? 0x644631
+          : room.table?.finish === "white"
+            ? 0xe3e5e1
+            : 0xb18a5f;
+      const top = (
+        room.table?.shape === "rectangular"
+          ? this.box.bind(this)
+          : this.rounded.bind(this)
+      )(
         table.width,
         0.075,
         table.depth,
-        0xb18a5f,
+        topColor,
         table.x,
         table.height - 0.0375,
         table.z,
       );
-      top.material = this.finish("wood", 0xb18a5f);
-      furniture.add(top);
-      furniture.add(
+      top.material =
+        room.table?.finish === "white"
+          ? this.material(topColor)
+          : this.finish("wood", topColor);
+      tableGroup.add(top);
+      tableGroup.add(
         this.rounded(
           0.16,
           0.008,
@@ -341,7 +358,7 @@ export class SpatialAssets {
         ),
       );
       for (const x of [-table.width * 0.3, table.width * 0.3])
-        furniture.add(
+        tableGroup.add(
           this.box(
             0.09,
             table.height - 0.09,
@@ -352,6 +369,14 @@ export class SpatialAssets {
             table.z,
           ),
         );
+      for (const child of tableGroup.children) {
+        child.position.x -= table.x;
+        child.position.z -= table.z;
+      }
+      tableGroup.position.set(table.x, 0, table.z);
+      tableGroup.traverse((o) => {
+        o.userData.furnitureId = `table:${index}`;
+      });
     }
     for (const seat of layout.seats) {
       const chair = new T.Group();
@@ -370,6 +395,9 @@ export class SpatialAssets {
       for (const x of [-0.18, 0.18])
         for (const z of [-0.18, 0.18])
           chair.add(this.box(0.025, 0.43, 0.025, 0x6a7983, x, 0.215, z));
+      chair.traverse((o) => {
+        o.userData.furnitureId = `seat:${seat.id}`;
+      });
       furniture.add(chair);
     }
     const stage = this.box(

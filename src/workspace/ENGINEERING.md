@@ -124,3 +124,21 @@ The active room uses Three.js meshes throughout: rounded furniture, generated wo
 Automatic wall placement searches free horizontal anchors around displays; table devices search free 0.5 m anchors inside the tabletop where space permits. Manual transforms remain unchanged. This is simple envelope spacing, not a full collision or clearance solver; crowded scenes still require review.
 
 Validation: 121/121 active workspace Vitest cases passed and production build succeeded. Coverage instrumentation was not run. The existing large bundle warning remains; 60 FPS was not benchmarked. Browser verification included microphone addition, pickup radius/angle edits, yaw, drag (9 to 5 covered seats), adding another microphone (room coverage restored to 9/9), and overlay orbit alignment. Speaker verification covered missing reference data, H/V input, reference SPL/distance, drag (8/9 to 6/9), yaw (0/9), pitch (1/9), wider dispersion (9/9), and length change 7 to 9 m (11 seats). The SPL field and seat values updated, and no browser console errors were reported.
+
+
+## Custom tables
+
+Room parameters now include optional table width, length, height, oak/walnut/white finish and rounded/square edges. These parameters generate our own Three.js furniture, with no Google geometry involved. The same immutable room state drives furniture, seating, automatic table anchors and analysis. Dimensions are clamped to the available room clearance; the UI shows effective dimensions. Custom training desks determine bay spacing and seats per desk. Manual equipment remains unchanged. Disabling customization restores automatic table dimensions.
+
+Validation: 126/126 active workspace tests passed; production build passed (existing bundle-size warning). Browser checks verified 2.2 x 4.5 x 0.9 m walnut/square furniture, 12 generated seats, recalculated audio summaries and reset to the original 9-seat layout. No console errors were reported.
+
+Google Photorealistic 3D Tiles integration is not implemented in this milestone. Site location and an enabled Map Tiles API project are still required. Google tiles would be exterior visualization context with required attribution; editable architectural geometry must remain independently authored, not extracted or traced from those tiles. See https://developers.google.com/maps/documentation/tile/policies .
+
+
+## Direct furniture editing
+
+`Edit furniture` enables raycast selection and dragging of generated tables and chairs. The inspector edits each table's dimensions and each chair's orientation. Dragging uses a 0.25 m grid (Shift: 0.05 m); Escape, pointer cancellation and window blur roll back the current gesture. Room changes during a gesture invalidate its rollback.
+
+Authored furniture overrides live in `DeviceStore.room.furniture`. `roomLayout` applies the same coordinates to Three.js furniture, listening/viewing seats and automatic tabletop equipment. Unedited seats follow their nearest generated table; explicitly positioned chairs and manually placed equipment remain independent. Resizing a table scales its generated seating offsets. Room bounds clamp the effective furniture footprint without discarding authored coordinates. Changing room type, layout or capacity clears overrides because the generated object identities change; presets also reset them. Per-object and full-layout reset controls are provided.
+
+Furniture-only changes reuse meshes and geometry, retain the camera, and schedule demand-rendered frames. They do not rebuild architectural surfaces or textures. Table meshes scale from their generated dimensions. Overlap prevention, arbitrary table rotation, wall topology editing and installation clearance certification are not implemented. Furniture is not an equipment BOM item. Session data remains in memory.
