@@ -4,13 +4,15 @@ Run `npm run dev`, `npm run build`, or `npm test` for the active application.
 
 - **Parametric room:** edit dimensions, semantic room type and requested capacity to regenerate procedural architecture, tables, chairs and overlays. Automatic equipment follows placement intent; manual transforms remain intact.
 - **Simulator catalog:** 83 original JSON records with preserved dimensions, ports and provenance; searchable inventory and validated JSON imports. Missing electrical loads remain unknown.
-- **Spatial workspace:** architectural cutaway, conference table and seating,
+- **Spatial workspace:** procedural architectural cutaway, rounded wood tables and upholstered seating,
+  textured finishes, room-fitted 2048 px shadows and tone-mapped studio lighting,
   distinct procedural devices, Plan/Isometric/Seat views, inventory placement,
   table/wall/ceiling snapping and Alt-drag remounting with Escape rollback.
 - **Signal schematic:** transactional catalog-based JSON imports, synchronized port nodes, draggable node layout, pan/zoom,
   compatible port connections, rounded orthogonal wiring and connection deletion.
 - **Planning audit:** seat-level viewing checks, direct SPL and optional broadband
   intelligibility-proxy maps, specified power/heat totals and project budget warnings.
+- **Audio planning:** live microphone pickup regions, rotated speaker dispersion, seat explanations and calculated coverage/SPL fields. Individual or room scope; incomplete source data keeps SPL totals unknown.
 - **Contextual inspector:** mounting, orientation, height and editable equipment
   specifications. The BOM updates from the same Zustand state.
 

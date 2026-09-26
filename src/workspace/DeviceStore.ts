@@ -35,6 +35,15 @@ export interface DevicePort {
   readonly notes?: string;
 }
 export interface DeviceMetadata {
+  readonly micPattern?: string;
+  readonly micModel?: "omni" | "cone" | "horizontal_sector" | "radius_only";
+  readonly micRadiusM?: number;
+  readonly micAngleDeg?: number;
+  readonly horizontalDispersionDeg?: number;
+  readonly verticalDispersionDeg?: number;
+  readonly referenceSplDb?: number;
+  readonly referenceDistanceM?: number;
+
   readonly horizontalFovDeg?: number;
   readonly verticalFovDeg?: number;
   readonly label: string;
@@ -165,6 +174,36 @@ function freezeDevice(input: PlacedDevice): PlacedDevice {
       input.metadata.coverageDegrees > 360)
   )
     throw new Error("Invalid coverage angle");
+  for (const key of [
+    "micRadiusM",
+    "micAngleDeg",
+    "horizontalDispersionDeg",
+    "verticalDispersionDeg",
+    "referenceDistanceM",
+  ] as const) {
+    const n = input.metadata[key];
+    if (
+      n !== undefined &&
+      (!Number.isFinite(n) ||
+        n <= 0 ||
+        ((key === "micAngleDeg" || key.includes("Dispersion")) && n > 360))
+    )
+      throw new Error(`Invalid ${key}`);
+  }
+  if (
+    input.metadata.referenceSplDb !== undefined &&
+    (!Number.isFinite(input.metadata.referenceSplDb) ||
+      input.metadata.referenceSplDb < 0 ||
+      input.metadata.referenceSplDb > 180)
+  )
+    throw new Error("Invalid reference SPL");
+  if (
+    input.metadata.micModel !== undefined &&
+    !["omni", "cone", "horizontal_sector", "radius_only"].includes(
+      input.metadata.micModel,
+    )
+  )
+    throw new Error("Invalid microphone model");
   for (const fov of [
     input.metadata.horizontalFovDeg,
     input.metadata.verticalFovDeg,

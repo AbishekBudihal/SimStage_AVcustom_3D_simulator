@@ -33,14 +33,19 @@ Source: https://www.avixa.org/resources/display-image-size-calculators/learn-mor
 
 ## Acoustic calculations
 
-Direct sound: `L(r) = L(1m) − 20 log10(max(1m, r))`. Multiple specified sources
-are summed by incoherent energy (`10 log10(sum(10^(L/10)))`). This assumes
-no obstacles/reflections and no phase interference. Generic references are omnidirectional. Manufacturer loudspeakers use sensitivity + 10 log10(drive Watts), capped at published continuous SPL, then an approximate conical attenuation of min(30, 6 × (off-axis / half-coverage-angle)^2) dB. This smooth curve is an assumption, not measured polar data. Zero drive contributes no sound.
-Distances below 1 m are clamped because this far-field approximation should not
-extrapolate near-field gain. Reference SPL is the operating level at 1 m, not a
-speaker's rated electrical power or sensitivity alone. Drive power is separate from mains power and does not imply a connected amplifier. Heatmap values are
-calculated at 1.2 m ear height and projected onto the floor for visualization.
-Unknown speaker levels yield partial coverage, explicitly flagged in the audit.
+Active audio calculations live in `AudioEngineering.ts`. `Engineering.ts` re-exports the existing `directSpl` API, so the audit and new audio modes share the source-level and distance calculation. The 0.5 m sampling lattice is extracted into `ListeningGrid.ts`; seating and the shared eye/ear/voice height come from `RoomLayout.ts` (default 1.2 m, configurable). Samples are evaluated at listener height and projected onto the floor.
+
+Microphones use preferred **3D distance**, plus a full pickup angle for an explicit cone or horizontal-sector model. Ceiling local +Z points downward before applying all three Euler rotations. Omnidirectional/radius-only models use radial geometry. Supplied beamforming/steerable array records with a radius use a clearly labelled radius-only planning envelope; no lobe shape or tracking is inferred. Missing model, angle or radius stays Unknown. Edge means the outer 10% of a specified radius or half-angle. Multiple microphones combine by coverage union: covered, then edge, then Unknown, then outside. This is geometric pickup coverage, not intelligibility or measured microphone response.
+
+Speakers support H/V dispersion or a conical full angle with the same full transform. Both H and V are needed when either rectangular angle is supplied. Rectangular overlay faces reuse room clipping from the camera engine (`RoomClip.ts`). A nominal dispersion boundary does not mean sound ceases beyond it.
+
+Direct sound: `L(r) = L(r0) - 20 log10(max(r0,r)/r0) - A`. Source data must supply an operating reference SPL and distance (legacy `splAt1m` uses 1 m), or sensitivity at 1 W/1 m plus explicit drive Watts. Sensitivity-derived levels are capped at supplied maximum SPL; a maximum rating alone never becomes an operating level. Drive power is separate from mains load. Zero drive contributes no sound. The imported catalog's initial 1 W assumption remains explicit and editable.
+
+Assumed polar loss is `A = min(30, 6*(angle/halfAngle)^2)` dB for a cone, or `min(30, 6*max((H/halfH)^2,(V/halfV)^2))` for rectangular dispersion. This smooth curve is an assumption, not measured polar data. Near-field gain below the reference distance is not extrapolated. Sources sum incoherent energy, `10 log10(sum(10^(L/10)))`; never average dB. Unknown source contributors prevent a complete total. The new speaker field additionally requires known dispersion. All-muted sources yield no level.
+
+The floor layer switches between **geometric coverage** (discrete green/amber/red/gray) and **free-field SPL estimate** (40–90 dB scale, gray Unknown). Individual contributions remain visible in selected-seat explanations. Room summary totals include every speaker; device scope evaluates only that device. No reflections, reverberation, absorption, HVAC noise, boundary gain, EQ, phase interference, occlusion or commissioning are simulated by these audio layers.
+
+AVIXA audio coverage uniformity calls for measurement across the listening area; these estimates do not establish compliance: https://www.avixa.org/resources/standards/audio-coverage-uniformity
 
 The optional intelligibility layer is a **broadband MTF proxy, not STI/STIPA**.
 With entered RT60 and background noise, modulation is approximated at 14
@@ -92,7 +97,7 @@ Import accepts arrays in the existing simulator schema, validates the entire bat
 
 Room dimensions initialize from `createDefaultRoom()` in the supplied RoomModel (10 x 7 x 3.2 m). Width/length accept 3–30 m and height 2–8 m. Valid edits update the room and mounting anchors atomically; walls and ceiling move, table anchors reclamp, and device IDs and wires persist. Conference seats use 0.85 m spacing. Training rows/columns use 3.6 x 1.6 m bays and perimeter clearance. These are furniture planning assumptions, not accessibility certification.
 
-Visual seat markers and cyan viewing-region boundaries use the same live image height, orientation, content and angle checks. Boundaries sample the region at 0.25 m on the 1.2 m seating plane and project it onto the floor; they are discrete planning contours, not certified DISCAS boundaries. Unknown image heights produce no region. SPL samples use live speaker coordinates and room dimensions. All placed devices contribute; selection only controls the inspector.
+Visual seat markers and cyan viewing-region boundaries use the same live image height, orientation, content and angle checks. Boundaries sample the region at 0.25 m on the 1.2 m seating plane and project it onto the floor; they are discrete planning contours, not certified DISCAS boundaries. Unknown image heights produce no region. SPL samples use live speaker coordinates and room dimensions. Audio analysis supports all-room or selected-device scope; the room summary always includes all matching devices.
 
 
 ## Capacity and semantic placement
@@ -110,3 +115,12 @@ Schematic JSON import adds nodes from existing catalog IDs and validates all end
 Optional node `position` and `rotation` use XYZ objects in metres and radians and preserve explicit engineer transforms. Arbitrary schematic drawing/PDF formats are not parsed. This path uses the active DeviceStore; no AppState synchronization layer or second persistent model exists. Rack-unit metadata and straight-line cable estimates remain available; rack allocation and installation cable routing have not been added.
 
 The procedural room includes a downward-facing ceiling (open from above), dimension-driven ceiling lights, floor seams, furniture groups and demand-rendered shadows. No static room model is loaded. There is no full collision solver or guarantee that equipment footprints cannot overlap.
+
+
+## Procedural room and verification — September 2026
+
+The active room uses Three.js meshes throughout: rounded furniture, generated wood/fabric material maps, window frames, low wall wainscot, a seamless studio ground and a downward-facing ceiling/light strips. ACES tone mapping, hemisphere fill and a directional key create demand-rendered contact shadows; the 2048 px shadow camera tracks room size. These visual lighting/material choices are not photometric or acoustic material simulations. Generated textures, geometries and materials are disposed on room replacement/unmount.
+
+Automatic wall placement searches free horizontal anchors around displays; table devices search free 0.5 m anchors inside the tabletop where space permits. Manual transforms remain unchanged. This is simple envelope spacing, not a full collision or clearance solver; crowded scenes still require review.
+
+Validation: 121/121 active workspace Vitest cases passed and production build succeeded. Coverage instrumentation was not run. The existing large bundle warning remains; 60 FPS was not benchmarked. Browser verification included microphone addition, pickup radius/angle edits, yaw, drag (9 to 5 covered seats), adding another microphone (room coverage restored to 9/9), and overlay orbit alignment. Speaker verification covered missing reference data, H/V input, reference SPL/distance, drag (8/9 to 6/9), yaw (0/9), pitch (1/9), wider dispersion (9/9), and length change 7 to 9 m (11 seats). The SPL field and seat values updated, and no browser console errors were reported.

@@ -240,6 +240,53 @@ export function parseCatalog(
         (coverageDegrees <= 0 || coverageDegrees > 360)
       )
         throw new Error(`${id}: invalid dispersion`);
+      const micPattern =
+        typeof mic.pattern === "string" ? mic.pattern : undefined;
+      const pickupModel =
+        mic.coverageModel === "directional_sector"
+          ? "horizontal_sector"
+          : mic.coverageModel;
+      const micModel: NewDevice["metadata"]["micModel"] =
+        pickupModel === "cone" ||
+        pickupModel === "horizontal_sector" ||
+        pickupModel === "omni" ||
+        pickupModel === "radius_only"
+          ? pickupModel
+          : /^omni(directional)?$/i.test(micPattern ?? "")
+            ? "omni"
+            : /beam|steer|array|toroid/i.test(micPattern ?? "")
+              ? "radius_only"
+              : undefined;
+      const audio = {
+        micPattern,
+        micModel,
+        micRadiusM: number(mic.pickupRadiusM, "pickup radius"),
+        micAngleDeg: number(
+          mic.pickupAngleDeg ?? mic.beamWidthDeg,
+          "pickup angle",
+        ),
+        horizontalDispersionDeg: number(
+          speaker.horizontalDispersionDeg,
+          "H dispersion",
+        ),
+        verticalDispersionDeg: number(
+          speaker.verticalDispersionDeg,
+          "V dispersion",
+        ),
+        referenceSplDb: number(speaker.referenceSplDb, "reference SPL"),
+        referenceDistanceM: number(
+          speaker.referenceDistanceM,
+          "reference distance",
+        ),
+      };
+      for (const [key, n] of Object.entries(audio))
+        if (
+          typeof n === "number" &&
+          ((key !== "referenceSplDb" && n <= 0) ||
+            (key.includes("Deg") && n > 360) ||
+            (key === "referenceSplDb" && (n < 0 || n > 180)))
+        )
+          throw new Error(`${id}: invalid ${key}`);
       const manufacturer = string(raw.manufacturer, "manufacturer"),
         model = string(raw.model, "model");
       const notes = [
@@ -269,6 +316,7 @@ export function parseCatalog(
         surfaces,
         ports,
         metadata: {
+          ...audio,
           label: `${manufacturer} ${model}`,
           powerWatts: watts,
           heatBtuPerHour: heat,
@@ -280,7 +328,7 @@ export function parseCatalog(
           coverageDegrees,
           maxSpl: number(speaker.maxSplAt1m, "maxSplAt1m"),
           speakerWatts: sensitivityDb !== undefined ? 1 : undefined,
-          splAt1m: null,
+          splAt1m: number(speaker.splAt1m, "SPL at 1m") ?? null,
           powerBasis:
             watts === null
               ? "Not supplied in source catalog"

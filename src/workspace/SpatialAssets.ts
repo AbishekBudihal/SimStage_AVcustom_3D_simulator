@@ -1,3 +1,4 @@
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { mountYaw as surfaceYaw } from "./OpticalTransform";
 import * as T from "three";
 import type {
@@ -9,6 +10,7 @@ import type {
 import { roomLayout } from "./RoomLayout";
 /** Shared procedural geometry/materials, disposed once by the owning canvas. */
 export class SpatialAssets {
+  private textures = new Map<string, T.DataTexture>();
   private geometries = new Map<string, T.BufferGeometry>();
   private materials = new Map<string, T.MeshStandardMaterial>();
   material(color: number, selected = false) {
@@ -47,6 +49,54 @@ export class SpatialAssets {
     mesh.position.set(x, y, z);
     return mesh;
   }
+  rounded(w: number, h: number, d: number, color: number, x = 0, y = 0, z = 0) {
+    const key = `rounded:${w}:${h}:${d}`;
+    let geometry = this.geometries.get(key);
+    if (!geometry) {
+      geometry = new RoundedBoxGeometry(
+        w,
+        h,
+        d,
+        3,
+        Math.min(0.06, w / 6, h / 3, d / 6),
+      );
+      this.geometries.set(key, geometry);
+    }
+    const mesh = new T.Mesh(geometry, this.material(color));
+    mesh.position.set(x, y, z);
+    return mesh;
+  }
+  finish(kind: "wood" | "fabric", color: number) {
+    const material = this.material(color);
+    if (material.map) return material;
+    const size = 128,
+      data = new Uint8Array(size * size * 4);
+    for (let y = 0; y < size; y++)
+      for (let x = 0; x < size; x++) {
+        const noise = ((x * 73 + y * 151 + x * y * 17) % 97) / 97;
+        const value =
+          kind === "wood"
+            ? 220 +
+              18 * Math.sin(y * 0.53 + Math.sin(x * 0.035) * 1.5) +
+              noise * 12
+            : 210 + noise * 35;
+        const i = (y * size + x) * 4;
+        data[i] = data[i + 1] = data[i + 2] = value;
+        data[i + 3] = 255;
+      }
+    const texture = new T.DataTexture(data, size, size, T.RGBAFormat);
+    texture.wrapS = texture.wrapT = T.RepeatWrapping;
+    texture.repeat.set(kind === "wood" ? 2 : 12, kind === "wood" ? 8 : 12);
+    texture.magFilter = T.LinearFilter;
+    texture.minFilter = T.LinearMipmapLinearFilter;
+    texture.generateMipmaps = true;
+    texture.needsUpdate = true;
+    this.textures.set(`${kind}:${color}`, texture);
+    material.map = texture;
+    material.roughness = kind === "wood" ? 0.55 : 0.95;
+    material.metalness = 0;
+    return material;
+  }
   device(device: PlacedDevice) {
     const root = this.box(...dimensions(device.kind), 0x263343);
     const details = new T.Group();
@@ -63,6 +113,25 @@ export class SpatialAssets {
       const glass = this.cylinder(0.038, 0.078, 0x28567b, 0, 0.08, 0.115);
       glass.rotation.x = Math.PI / 2;
       details.add(glass);
+    } else if (
+      (device.kind === "ceiling_mic" || device.kind === "speaker") &&
+      device.surface === "ceiling"
+    ) {
+      const bottom = -dimensions(device.kind)[1] / 2 - 0.005;
+      for (let i = -3; i <= 3; i++)
+        details.add(
+          this.box(
+            device.kind === "speaker" ? 0.2 : 0.3,
+            0.006,
+            0.008,
+            0x8698a8,
+            0,
+            bottom,
+            i * 0.025,
+          ),
+        );
+      if (device.kind === "speaker")
+        details.add(this.cylinder(0.08, 0.008, 0x16222c, 0, bottom - 0.005, 0));
     } else if (device.kind === "ceiling_mic" || device.kind === "speaker") {
       for (let i = -3; i <= 3; i++)
         details.add(
@@ -155,30 +224,39 @@ export class SpatialAssets {
     group.add(this.box(w, h, 0.12, 0xd3d7d7, 0, h / 2, -d / 2 - 0.06));
     group.add(this.box(0.12, h, d, 0x9aa8ad, -w / 2 - 0.06, h / 2, 0));
     group.add(this.box(w, 0.09, 0.04, 0x8a989e, 0, 0.045, -d / 2 + 0.025));
-    for (let i = 0; i < Math.max(1, Math.floor((w - 0.8) / 0.7)); i++)
-      group.add(
-        this.box(
-          0.55,
-          h * 0.65,
-          0.045,
-          0x85979e,
-          -w / 2 + 0.6 + i * 0.7,
-          h * 0.54,
-          -d / 2 + 0.04,
-        ),
+    // Low wainscot keeps the presentation wall clear of mounted equipment.
+    const trim = this.box(w, 0.65, 0.018, 0x8c7157, 0, 0.325, -d / 2 + 0.01);
+    trim.material = this.finish("wood", 0x8c7157);
+    group.add(trim);
+    for (let z = -d / 2 + 0.6; z < d / 2 - 0.5; z += 1.4) {
+      const pane = this.box(
+        0.015,
+        h * 0.58,
+        1.15,
+        0xa6c0c9,
+        -w / 2 + 0.015,
+        h * 0.58,
+        z,
       );
-    for (let i = 0; i < 3; i++)
+      pane.material.roughness = 0.24;
+      pane.material.metalness = 0.35;
+      group.add(pane);
+      for (const dz of [-0.59, 0.59])
+        group.add(
+          this.box(
+            0.05,
+            h * 0.62,
+            0.04,
+            0x45515a,
+            -w / 2 + 0.04,
+            h * 0.58,
+            z + dz,
+          ),
+        );
       group.add(
-        this.box(
-          0.025,
-          h * 0.68,
-          d / 4 - 0.12,
-          0x73909b,
-          -w / 2 + 0.025,
-          h * 0.56,
-          ((i - 1) * d) / 3.5,
-        ),
+        this.box(0.12, 0.045, 1.24, 0xe0dfd9, -w / 2 + 0.06, h * 0.27, z),
       );
+    }
     // Downward-facing ceiling: visible from inside, open from the overview.
     const ceiling = this.box(w, 0.035, d, 0xe3e7e5, 0, h + 0.025, 0);
     const ceilingMaterial = this.material(0xe3e7e5);
@@ -202,14 +280,22 @@ export class SpatialAssets {
     for (let x = 0; x < nx; x++)
       for (let z = 0; z < nz; z++) {
         const fixture = this.box(
-          0.6,
+          0.08,
           0.035,
-          0.6,
+          1.0,
           0xf8f3df,
           -w / 2 + ((x + 0.5) * w) / nx,
           h - 0.04,
           -d / 2 + ((z + 0.5) * d) / nz,
         );
+        const fixtureKey = "fixture-plane";
+        let fixtureGeometry = this.geometries.get(fixtureKey);
+        if (!fixtureGeometry) {
+          fixtureGeometry = new T.PlaneGeometry(0.08, 1);
+          fixtureGeometry.rotateX(Math.PI / 2);
+          this.geometries.set(fixtureKey, fixtureGeometry);
+        }
+        fixture.geometry = fixtureGeometry;
         fixture.name = "Office light";
         group.add(fixture);
       }
@@ -220,16 +306,37 @@ export class SpatialAssets {
     furniture.name = "Furniture";
     group.add(furniture);
     const layout = roomLayout(room);
-    group.add(this.box(w * 0.85, 0.012, d * 0.83, 0x87979c, 0, 0.014, 0));
+    const carpet = this.rounded(
+      w * 0.85,
+      0.012,
+      d * 0.83,
+      0x78858a,
+      0,
+      0.014,
+      0,
+    );
+    carpet.material = this.finish("fabric", 0x78858a);
+    group.add(carpet);
     for (const table of layout.tables) {
+      const top = this.rounded(
+        table.width,
+        0.075,
+        table.depth,
+        0xb18a5f,
+        table.x,
+        table.height - 0.0375,
+        table.z,
+      );
+      top.material = this.finish("wood", 0xb18a5f);
+      furniture.add(top);
       furniture.add(
-        this.box(
-          table.width,
-          0.09,
-          table.depth,
-          0xc0a17a,
+        this.rounded(
+          0.16,
+          0.008,
+          0.36,
+          0x303b43,
           table.x,
-          table.height - 0.045,
+          table.height + 0.004,
           table.z,
         ),
       );
@@ -250,22 +357,46 @@ export class SpatialAssets {
       const chair = new T.Group();
       chair.position.set(seat.position.x, 0, seat.position.z);
       chair.rotation.y = seat.rotation;
-      chair.add(this.box(0.48, 0.09, 0.48, 0x405764, 0, 0.46, 0));
-      chair.add(this.box(0.48, 0.48, 0.08, 0x405764, 0, 0.71, -0.22));
+      const cushion = this.rounded(0.49, 0.11, 0.49, 0x394951, 0, 0.46, 0);
+      cushion.material = this.finish("fabric", 0x394951);
+      chair.add(cushion);
+      const back = this.rounded(0.49, 0.52, 0.085, 0x394951, 0, 0.74, -0.22);
+      back.rotation.x = -0.1;
+      chair.add(back);
+      for (const x of [-0.27, 0.27]) {
+        chair.add(this.rounded(0.045, 0.035, 0.32, 0x27333b, x, 0.65, 0));
+        chair.add(this.box(0.025, 0.18, 0.025, 0x79858a, x, 0.55, 0.1));
+      }
       for (const x of [-0.18, 0.18])
         for (const z of [-0.18, 0.18])
           chair.add(this.box(0.025, 0.43, 0.025, 0x6a7983, x, 0.215, z));
       furniture.add(chair);
     }
+    const stage = this.box(
+      Math.max(100, w * 5),
+      0.06,
+      Math.max(100, d * 5),
+      0x3f4c57,
+      0,
+      -0.23,
+      0,
+    );
+    stage.name = "Studio ground";
+    group.add(stage);
     group.traverse((o) => {
       if (o instanceof T.Mesh) {
         o.receiveShadow = true;
-        o.castShadow = o.parent === furniture || o.parent?.parent === furniture;
+        o.castShadow =
+          o.name !== "Ceiling" &&
+          o.name !== "Office light" &&
+          o.name !== "Studio ground";
       }
     });
     return group;
   }
   dispose() {
+    this.textures.forEach((t) => t.dispose());
+    this.textures.clear();
     this.geometries.forEach((g) => g.dispose());
     this.materials.forEach((m) => m.dispose());
     this.geometries.clear();

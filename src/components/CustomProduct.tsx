@@ -45,6 +45,17 @@ export function CustomProduct({
                 aspectRatio: text("aspect") || undefined,
                 resolution: text("resolution") || undefined,
               },
+              microphone: {
+                coverageModel: text("pickupModel") || undefined,
+                pickupRadiusM: n("pickupRadius"),
+                pickupAngleDeg: n("pickupAngle"),
+              },
+              speaker: {
+                horizontalDispersionDeg: n("hDispersion"),
+                verticalDispersionDeg: n("vDispersion"),
+                referenceSplDb: n("referenceSpl"),
+                referenceDistanceM: n("referenceDistance"),
+              },
               ports: JSON.parse(text("ports") || "[]"),
             };
             store.api.getState().importCatalog([raw], "Custom product form");
@@ -127,6 +138,32 @@ export function CustomProduct({
             }
           />
         </label>
+        <details>
+          <summary>Optional audio specifications</summary>
+          <label>
+            Pickup model
+            <select name="pickupModel">
+              <option value="">Unknown</option>
+              <option value="omni">Omnidirectional</option>
+              <option value="cone">3D cone</option>
+              <option value="horizontal_sector">Horizontal sector</option>
+              <option value="radius_only">Preferred radius only</option>
+            </select>
+          </label>
+          {[
+            ["pickupRadius", "Pickup radius (m)"],
+            ["pickupAngle", "Pickup angle (°)"],
+            ["hDispersion", "H dispersion (°)"],
+            ["vDispersion", "V dispersion (°)"],
+            ["referenceSpl", "Source reference SPL (dB)"],
+            ["referenceDistance", "Source reference distance (m)"],
+          ].map(([key, label]) => (
+            <label key={key}>
+              {label}
+              <input name={key} type="number" step="any" />
+            </label>
+          ))}
+        </details>
         <button type="submit">Save custom product</button>
         <p role="status">{error}</p>
       </form>

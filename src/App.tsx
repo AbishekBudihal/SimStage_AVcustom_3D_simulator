@@ -1,3 +1,5 @@
+import { AudioAnalysisPanel } from "./components/AudioAnalysisPanel";
+import { analyzeAudio } from "./workspace/AudioEngineering";
 import { OpticalAnalysisPanel } from "./components/OpticalAnalysisPanel";
 import { cameraCoverage, displayViewing } from "./workspace/OpticalEngineering";
 import { cableRoutes, type WorkspaceMode } from "./workspace/SpatialOverlays";
@@ -39,6 +41,8 @@ export default function App() {
   const [analysisIds, setAnalysisIds] = useState<{
     camera?: string;
     display?: string;
+    microphone?: string;
+    speaker?: string;
   }>({});
   useEffect(() => {
     const d = selectedId ? devices[selectedId] : undefined;
@@ -47,7 +51,11 @@ export default function App() {
         ? "camera"
         : d?.kind === "display"
           ? "display"
-          : null;
+          : d?.kind === "ceiling_mic"
+            ? "microphone"
+            : d?.kind === "speaker"
+              ? "speaker"
+              : null;
     if (kind && d)
       setAnalysisIds((ids) =>
         ids[kind] === d.id ? ids : { ...ids, [kind]: d.id },
@@ -69,6 +77,26 @@ export default function App() {
         : displayViewing(device, store.api.getState())
       : undefined;
   }, [mode, devices, selectedId, analysisIds, room, settings, store]);
+  const [audioScope, setAudioScope] = useState<"room" | "device">("room");
+  const [audioLayer, setAudioLayer] = useState<"coverage" | "spl">("coverage");
+  const roomMic = useMemo(
+    () => analyzeAudio(store.api.getState(), "microphone"),
+    [devices, room, store],
+  );
+  const roomSpeaker = useMemo(
+    () => analyzeAudio(store.api.getState(), "speaker"),
+    [devices, room, store],
+  );
+  const audio = useMemo(() => {
+    if (mode !== "microphone" && mode !== "speaker") return undefined;
+    const all = mode === "microphone" ? roomMic : roomSpeaker;
+    if (audioScope === "room") return all;
+    const id =
+      all.devices.find((d) => d.deviceId === selectedId)?.deviceId ??
+      all.devices.find((d) => d.deviceId === analysisIds[mode])?.deviceId ??
+      all.devices[0]?.deviceId;
+    return id ? analyzeAudio(store.api.getState(), mode, id) : all;
+  }, [mode, roomMic, roomSpeaker, audioScope, selectedId, analysisIds, store]);
   const routes = useMemo(
     () => cableRoutes(store.api.getState()),
     [devices, connections, room, store],
@@ -115,7 +143,26 @@ export default function App() {
   }, [store]);
   useEffect(() => {
     const manager = canvas.current;
-    manager?.setHeatmap(mode === "speaker" ? "spl" : "off", audit.field);
+    if (audio)
+      manager?.setHeatmap(
+        mode === "speaker" && audioLayer === "spl" ? "spl" : "coverage",
+        audio.field.map((p) => ({
+          x: p.x,
+          z: p.z,
+          spl:
+            mode === "speaker" && audioLayer === "spl"
+              ? p.spl
+              : p.status === "unknown"
+                ? null
+                : p.status === "covered"
+                  ? 1
+                  : p.status === "edge"
+                    ? 0.5
+                    : 0,
+          intelligibility: null,
+        })),
+      );
+    else manager?.setHeatmap("off");
     manager?.setVisualOverlay(false, audit.visual);
     manager?.setVisualCones(false, devices, settings);
     manager?.setWorkspaceMode(
@@ -125,8 +172,11 @@ export default function App() {
       selectedCable,
       optical,
       selectedSeat,
+      audio,
     );
   }, [
+    audio,
+    audioLayer,
     optical,
     selectedSeat,
     audit,
@@ -291,14 +341,16 @@ export default function App() {
             )}
             {mode === "microphone" && (
               <div className="mode-note">
-                Catalog pickup-radius envelopes at 1.2 m; microphone polar/lobe
-                shape and intelligibility are not inferred. Missing radius shows
-                no guide.
+                Geometric pickup coverage at configured seated mouth/ear height.
+                Green covered · amber outer 10% · red outside · gray Unknown. No
+                measured lobe or intelligibility prediction.
               </div>
             )}
             {mode === "speaker" && (
               <div className="mode-note">
-                Direct SPL estimate: blue 40 dB → red 90 dB; gray unknown.
+                Geometric coverage or free-field SPL estimate (40–90 dB color
+                scale). Gray means Unknown. Assumed polar response; not measured
+                room SPL.
               </div>
             )}
             {mode === "display" && (
@@ -379,6 +431,19 @@ export default function App() {
               selectSeat={setSelectedSeat}
             />
           )}
+          <AudioAnalysisPanel
+            store={store}
+            mode={mode}
+            analysis={audio}
+            microphones={roomMic}
+            speakers={roomSpeaker}
+            scope={audioScope}
+            setScope={setAudioScope}
+            layer={audioLayer}
+            setLayer={setAudioLayer}
+            selectedSeat={selectedSeat}
+            selectSeat={setSelectedSeat}
+          />
           <EngineeringPanel store={store} audit={audit} />
           <PropertyInspector store={store} room={room} />
           <p className="session-note">

@@ -4,18 +4,42 @@ import { roomLayout, ROOM_TYPES } from "../../src/workspace/RoomLayout";
 import { importSchematic } from "../../src/workspace/SchematicImport";
 import { engineeringAudit } from "../../src/workspace/Engineering";
 import { SpatialAssets } from "../../src/workspace/SpatialAssets";
+import { deviceFromProfile } from "../../src/workspace/catalog";
 describe("capacity driven dynamic design", () => {
+  it("keeps automatic wall and table devices clear of existing equipment where space permits", () => {
+    const store = createWorkspace();
+    const add = (
+      kind: "speaker" | "ceiling_mic",
+      surface: "north" | "table",
+    ) => {
+      const state = store.api.getState(),
+        profile = state.catalog.find(
+          (p) => p.kind === kind && p.surface === surface,
+        )!;
+      return store.add(deviceFromProfile(profile, 0, state.room));
+    };
+    const speaker = store.get(add("speaker", "north"))!;
+    const display = store.snapshot().find((d) => d.kind === "display")!;
+    expect(Math.abs(speaker.position.x - display.position.x)).toBeGreaterThan(
+      (speaker.dimensions!.x + display.dimensions!.x) / 2,
+    );
+    const mic = store.get(add("ceiling_mic", "table"))!;
+    const dsp = store.snapshot().find((d) => d.kind === "dsp")!;
+    expect(mic.position).not.toEqual(dsp.position);
+    store.move(mic.id, { ...mic.position, z: 1 });
+    const manual = store.get(mic.id)!.position;
+    store.api.getState().setRoom({ width: 12, depth: 9 });
+    expect(store.get(mic.id)!.position).toEqual(manual);
+  });
   it("creates twelve seats in a 9 x 12 boardroom and adapts to capacity and dimensions", () => {
     const store = createWorkspace();
-    store.api
-      .getState()
-      .setRoom({
-        roomType: "Boardroom",
-        width: 9,
-        depth: 12,
-        height: 3.5,
-        capacity: 12,
-      });
+    store.api.getState().setRoom({
+      roomType: "Boardroom",
+      width: 9,
+      depth: 12,
+      height: 3.5,
+      capacity: 12,
+    });
     expect(roomLayout(store.api.getState().room).seats).toHaveLength(12);
     store.api.getState().setRoom({ capacity: 6 });
     expect(roomLayout(store.api.getState().room).seats).toHaveLength(6);

@@ -1,3 +1,4 @@
+import type { AudioAnalysis } from "./AudioEngineering";
 import type { OpticalResult } from "./OpticalEngineering";
 import * as T from "three";
 import type { DeviceState, RoomSize, XYZ } from "./DeviceStore";
@@ -144,8 +145,45 @@ export class SpatialOverlays {
     selected: string | null,
     optical?: OpticalResult,
     selectedSeat?: string | null,
+    audio?: AudioAnalysis,
   ) {
     this.clear();
+    if (audio && (mode === "microphone" || mode === "speaker")) {
+      for (const d of audio.devices) {
+        for (const segment of d.segments)
+          this.line(segment, mode === "microphone" ? 0x8ad8b1 : 0x82baff);
+        this.line(
+          [
+            d.origin,
+            {
+              x: d.origin.x + d.direction.x,
+              y: d.origin.y + d.direction.y,
+              z: d.origin.z + d.direction.z,
+            },
+          ],
+          0xffffff,
+        );
+      }
+      for (const seat of audio.seats) {
+        const color = {
+          covered: 0x26d99a,
+          edge: 0xffc857,
+          outside: 0xf45363,
+          unknown: 0x718096,
+        }[seat.status];
+        const marker = new T.Mesh(
+          new T.SphereGeometry(seat.id === selectedSeat ? 0.13 : 0.08, 12, 8),
+          new T.MeshBasicMaterial({ color, depthTest: false }),
+        );
+        marker.position.copy(vector(seat.position));
+        marker.renderOrder = 12;
+        this.group.add(marker);
+        if (seat.id === selectedSeat)
+          for (const d of audio.devices)
+            this.line([d.origin, seat.position], color);
+      }
+      return;
+    }
     if ((mode === "camera" || mode === "display") && optical) {
       for (const points of optical.segments) this.line(points, 0x6dd9ff);
       this.line(
@@ -244,32 +282,6 @@ export class SpatialOverlays {
             c.id,
           );
         }
-    if (mode === "microphone")
-      for (const d of Object.values(state.devices)) {
-        if (!d || d.kind !== "ceiling_mic") continue;
-        const raw = state.catalog.find((p) => p.id === d.catalogId)?.raw
-          .microphone as Record<string, unknown> | undefined;
-        const radius = raw?.pickupRadiusM;
-        if (
-          typeof radius !== "number" ||
-          !Number.isFinite(radius) ||
-          radius <= 0
-        )
-          continue;
-        const y = Math.min(1.2, state.room.height);
-        this.line(
-          Array.from({ length: 65 }, (_, i) => ({
-            x: d.position.x + radius * Math.cos((i * Math.PI) / 32),
-            y,
-            z: d.position.z + radius * Math.sin((i * Math.PI) / 32),
-          })),
-          0x77e6bc,
-        );
-        this.line(
-          [d.position, { x: d.position.x, y, z: d.position.z }],
-          0x77e6bc,
-        );
-      }
   }
   private clear() {
     this.group.traverse((o) => {
