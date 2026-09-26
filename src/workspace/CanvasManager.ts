@@ -1,3 +1,4 @@
+import type { AudioAnalysis } from "./AudioEngineering";
 import { eyeHeight } from "./RoomLayout";
 import type { OpticalResult } from "./OpticalEngineering";
 import { SpatialOverlays, type WorkspaceMode } from "./SpatialOverlays";
@@ -49,6 +50,7 @@ export class CanvasManager {
   get room(): RoomSize {
     return this.currentRoom;
   }
+  private keyLight = new THREE.DirectionalLight(0xfff4e2, 3);
   private roomAssets = new SpatialAssets();
   private roomGroup: THREE.Group;
   private view: WorkspaceView = "isometric";
@@ -57,7 +59,7 @@ export class CanvasManager {
   private readonly meshes = new Map<string, THREE.Mesh>();
   private readonly assets = new SpatialAssets();
   private heatmap: THREE.InstancedMesh | undefined;
-  private heatMode: "off" | "spl" | "intelligibility" = "off";
+  private heatMode: "off" | "spl" | "intelligibility" | "coverage" = "off";
   private field: readonly FieldPoint[] = [];
 
   private grid: THREE.GridHelper;
@@ -87,20 +89,24 @@ export class CanvasManager {
     this.distance = Math.max(room.width, room.depth, room.height) * 2;
     this.camera.far = Math.max(1000, this.distance * 10);
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-    this.scene.background = new THREE.Color("#0f1115");
-    this.renderer.setClearColor(0x0f1115);
+    this.scene.background = new THREE.Color("#202b35");
+    this.renderer.setClearColor(0x202b35);
     this.renderer.domElement.style.cssText =
       "display:block;width:100%;height:100%;touch-action:none";
     host.appendChild(this.renderer.domElement);
-    this.scene.add(new THREE.AmbientLight(0xffffff, 1.5));
-    const light = new THREE.DirectionalLight(0xffffff, 2);
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.05;
+    this.scene.add(new THREE.HemisphereLight(0xe3f1ff, 0x494136, 1.15));
+    const light = this.keyLight;
     light.position.set(4, 10, 6);
     if (this.renderer.shadowMap) {
       this.renderer.shadowMap.enabled = true;
       this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     }
     light.castShadow = true;
-    light.shadow.mapSize.set(1024, 1024);
+    light.shadow.mapSize.set(2048, 2048);
     Object.assign(light.shadow.camera, {
       left: -20,
       right: 20,
@@ -108,7 +114,9 @@ export class CanvasManager {
       bottom: -20,
       far: 80,
     });
-    light.shadow.normalBias = 0.03;
+    light.shadow.normalBias = 0.012;
+    light.shadow.bias = -0.0002;
+    light.shadow.radius = 3;
     this.scene.add(light);
     // Even division count keeps the centre and every line on the 0.5 m lattice.
     const size = Math.ceil(Math.max(room.width, room.depth));
@@ -118,6 +126,7 @@ export class CanvasManager {
     this.scene.add(this.grid);
     this.roomGroup = this.roomAssets.room(room);
     this.scene.add(this.roomGroup);
+    this.fitLighting();
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(host);
     this.renderer.domElement.addEventListener("pointerdown", this.select);
@@ -135,6 +144,24 @@ export class CanvasManager {
     this.resize();
   }
 
+  private fitLighting() {
+    const { width, depth, height } = this.room,
+      r = Math.max(width, depth, height);
+    this.keyLight.position.set(
+      width * 0.35,
+      height + depth * 0.7,
+      depth * 0.45,
+    );
+    Object.assign(this.keyLight.shadow.camera, {
+      left: -r * 0.8,
+      right: r * 0.8,
+      top: r * 0.8,
+      bottom: -r * 0.8,
+      near: 0.1,
+      far: r * 4,
+    });
+    this.keyLight.shadow.camera.updateProjectionMatrix();
+  }
   /** Rebuild only room resources; preserve renderer, cameras and device identities. */
   setRoom(room: RoomSize): void {
     if (this.disposed || this.currentRoom === room) return;
@@ -153,6 +180,7 @@ export class CanvasManager {
     this.grid = new THREE.GridHelper(size, size * 2, 0x526075, 0x29313e);
     this.grid.position.y = 0.033;
     this.scene.add(this.roomGroup, this.grid);
+    this.fitLighting();
     this.distance = Math.max(room.width, room.depth, room.height) * 2;
     this.setView(this.view, false);
     this.resize();
@@ -375,7 +403,7 @@ export class CanvasManager {
   }
 
   setHeatmap(
-    mode: "off" | "spl" | "intelligibility",
+    mode: "off" | "spl" | "intelligibility" | "coverage",
     field: readonly FieldPoint[] = this.field,
   ): void {
     if (this.disposed) return;
@@ -413,12 +441,17 @@ export class CanvasManager {
       const object = new THREE.Object3D(),
         color = new THREE.Color();
       field.forEach((point, index) => {
-        const value = mode === "spl" ? point.spl : point.intelligibility;
+        const value =
+          mode === "intelligibility" ? point.intelligibility : point.spl;
         object.position.set(point.x, 0.045, point.z);
         object.rotation.x = -Math.PI / 2;
         object.updateMatrix();
         this.heatmap!.setMatrixAt(index, object.matrix);
         if (value === null) color.setHex(0x526172);
+        else if (mode === "coverage")
+          color.setHex(
+            value === 1 ? 0x26d99a : value === 0.5 ? 0xffc857 : 0xf45363,
+          );
         else
           color.setHSL(
             (1 -
@@ -446,6 +479,7 @@ export class CanvasManager {
     selectedCable: string | null = null,
     optical?: OpticalResult,
     selectedSeat?: string | null,
+    audio?: AudioAnalysis,
   ): void {
     if (this.disposed) return;
     this.overlays?.update(
@@ -455,6 +489,7 @@ export class CanvasManager {
       selectedCable,
       optical,
       selectedSeat,
+      audio,
     );
     this.invalidate();
   }
@@ -640,6 +675,7 @@ export class CanvasManager {
     this.overlays?.dispose();
     this.renderer.domElement.removeEventListener("dblclick", this.doubleClick);
     window.removeEventListener?.("resize", this.onWindowResize);
+    this.keyLight.shadow.dispose();
     this.assets.dispose();
     this.roomAssets.dispose();
     if (this.visualBoundary) {

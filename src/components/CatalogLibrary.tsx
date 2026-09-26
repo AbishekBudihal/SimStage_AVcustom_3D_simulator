@@ -154,6 +154,26 @@ export function CatalogLibrary({
                     {key}: {specificationText(value)}
                   </div>
                 ))}
+              {item.kind === "ceiling_mic" && (
+                <p>
+                  Pickup: {item.metadata.micModel ?? "Unknown"} · radius{" "}
+                  {specificationText(item.metadata.micRadiusM)} m · angle{" "}
+                  {specificationText(item.metadata.micAngleDeg)}°
+                </p>
+              )}
+              {item.kind === "speaker" && (
+                <p>
+                  Dispersion H / V:{" "}
+                  {specificationText(item.metadata.horizontalDispersionDeg)}° /{" "}
+                  {specificationText(item.metadata.verticalDispersionDeg)}° ·
+                  conical {specificationText(item.metadata.coverageDegrees)}°.
+                  Reference{" "}
+                  {specificationText(
+                    item.metadata.referenceSplDb ?? item.metadata.splAt1m,
+                  )}{" "}
+                  dB.
+                </p>
+              )}
               <p>
                 {item.ports
                   .map((p) => `${p.label} (${p.direction}, ${p.signal})`)

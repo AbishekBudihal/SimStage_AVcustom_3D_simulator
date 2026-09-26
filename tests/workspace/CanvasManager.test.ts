@@ -112,6 +112,27 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 describe("CanvasManager", () => {
+  it("resizes the shadow camera and releases procedural textures when rooms change", () => {
+    const textures = new Set<THREE.Texture>();
+    manager.scene.getObjectByName("Architectural room")!.traverse((o) => {
+      if (
+        o instanceof THREE.Mesh &&
+        o.material instanceof THREE.MeshStandardMaterial &&
+        o.material.map
+      )
+        textures.add(o.material.map);
+    });
+    expect(textures.size).toBeGreaterThan(0);
+    const disposals = [...textures].map((t) => vi.spyOn(t, "dispose"));
+    const light = manager.scene.children.find(
+      (o) => o instanceof THREE.DirectionalLight,
+    ) as THREE.DirectionalLight;
+    const oldRight = light.shadow.camera.right;
+    manager.setRoom({ width: 14, depth: 8, height: 3.5 });
+    expect(light.shadow.camera.right).toBeGreaterThan(oldRight);
+    expect(light.shadow.mapSize.x).toBe(2048);
+    disposals.forEach((dispose) => expect(dispose).toHaveBeenCalledTimes(1));
+  });
   it("disposes replaced room resources and preserves renderer and device objects", () => {
     manager.syncDevices([device], null);
     const mesh = manager.pickTargets[0],
@@ -205,7 +226,7 @@ describe("CanvasManager", () => {
   });
   it("uses dark background, required lights and half-metre grid lines", () => {
     expect((manager.scene.background as THREE.Color).getHexString()).toBe(
-      "0f1115",
+      "202b35",
     );
     expect(
       manager.scene.children.some(

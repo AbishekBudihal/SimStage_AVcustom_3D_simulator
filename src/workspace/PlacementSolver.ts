@@ -57,6 +57,14 @@ export function solvePlacements(
   ] as const) {
     const group = groups.get(intent) ?? [];
     group.forEach((d, index) => {
+      const occupied = Object.values(result).filter(
+        (other): other is PlacedDevice =>
+          !!other &&
+          other.id !== d.id &&
+          (other.placement?.mode !== "auto" ||
+            other.kind === "display" ||
+            group.slice(0, index).some((p) => p.id === other.id)),
+      );
       const half = (d.dimensions?.x ?? 0) / 2,
         height = d.dimensions?.y ?? 0,
         depth = d.dimensions?.z ?? 0;
@@ -73,6 +81,24 @@ export function solvePlacements(
           y: clamp(room.height * 0.52, height / 2, room.height - height / 2),
           z: -room.depth / 2,
         };
+        if (intent === "frontWall") {
+          // Search the actual free wall intervals, including display envelopes.
+          const candidates = Array.from(
+            { length: Math.floor(room.width * 2) + 1 },
+            (_, i) => Math.ceil((-room.width / 2 + half) * 2) / 2 + i * 0.5,
+          )
+            .filter((x) => x + half <= room.width / 2)
+            .sort((a, b) => Math.abs(a) - Math.abs(b) || a - b);
+          const free = candidates.find((x) =>
+            occupied.every(
+              (o) =>
+                o.surface !== "north" ||
+                Math.abs(x - o.position.x) >=
+                  half + (o.dimensions?.x ?? 0.5) / 2 + 0.15,
+            ),
+          );
+          if (free !== undefined) position.x = free;
+        }
       } else if (intent === "ceilingGrid") {
         const columns = Math.ceil(
             Math.sqrt((group.length * room.width) / room.depth),
@@ -108,6 +134,35 @@ export function solvePlacements(
         if (t) {
           surface = "table";
           position = { x: t.x, y: t.height, z: t.z };
+          // Place separate devices on free 0.5 m anchors within the table bounds.
+          const anchors: { x: number; y: number; z: number }[] = [];
+          for (
+            let z = Math.ceil((t.z - t.depth / 2 + depth / 2) * 2) / 2;
+            z <= t.z + t.depth / 2 - depth / 2;
+            z += 0.5
+          )
+            for (
+              let x = Math.ceil((t.x - t.width / 2 + half) * 2) / 2;
+              x <= t.x + t.width / 2 - half;
+              x += 0.5
+            )
+              anchors.push({ x, y: t.height, z });
+          anchors.sort(
+            (a, b) =>
+              Math.hypot(a.x - t.x, a.z - t.z) -
+              Math.hypot(b.x - t.x, b.z - t.z),
+          );
+          const free = anchors.find((p) =>
+            occupied.every(
+              (o) =>
+                o.surface !== "table" ||
+                Math.abs(p.x - o.position.x) >=
+                  half + (o.dimensions?.x ?? 0.3) / 2 + 0.1 ||
+                Math.abs(p.z - o.position.z) >=
+                  depth / 2 + (o.dimensions?.z ?? 0.3) / 2 + 0.1,
+            ),
+          );
+          if (free) position = free;
         } else {
           surface = "floor";
           position = { x: 0, y: 0, z: 0 };

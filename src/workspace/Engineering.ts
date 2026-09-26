@@ -1,3 +1,6 @@
+import { directSpl } from "./AudioEngineering";
+export { directSpl } from "./AudioEngineering";
+import { sampleListeningPlane } from "./ListeningGrid";
 import { screenOrigin, orientation } from "./OpticalTransform";
 import * as T from "three";
 import type {
@@ -64,59 +67,6 @@ function visualEvaluator(display: PlacedDevice, settings: EngineeringSettings) {
       status,
     };
   };
-}
-/** Free-field energy sum with optional sensitivity/drive and approximate conical directivity. */
-export function directSpl(
-  speakers: readonly PlacedDevice[],
-  point: XYZ,
-): number | null {
-  let energy = 0;
-  for (const speaker of speakers) {
-    const m = speaker.metadata;
-    let reference = m.splAt1m;
-    if (m.sensitivityDb !== undefined && m.speakerWatts !== undefined) {
-      if (m.speakerWatts === 0) continue;
-      reference = Math.min(
-        m.maxSpl ?? Infinity,
-        m.sensitivityDb + 10 * Math.log10(m.speakerWatts),
-      );
-    }
-    if (reference == null) continue;
-    let attenuation = 0;
-    if (m.coverageDegrees !== undefined) {
-      const forward = new T.Vector3(0, 0, 1);
-      if (speaker.surface === "ceiling") forward.set(0, -1, 0);
-      else
-        forward.applyAxisAngle(
-          new T.Vector3(0, 1, 0),
-          surfaceYaw(speaker.surface),
-        );
-      forward.applyEuler(
-        new T.Euler(speaker.rotation.x, speaker.rotation.y, speaker.rotation.z),
-      );
-      const direction = new T.Vector3(
-        point.x - speaker.position.x,
-        point.y - speaker.position.y,
-        point.z - speaker.position.z,
-      );
-      const angle = direction.lengthSq()
-        ? forward.angleTo(direction) * radToDeg
-        : 0;
-      // Smooth planning polar: -6 dB at the published half-coverage angle; no measured polar data.
-      attenuation = Math.min(30, 6 * (angle / (m.coverageDegrees / 2)) ** 2);
-    }
-    const distance = Math.max(
-      1,
-      Math.hypot(
-        point.x - speaker.position.x,
-        point.y - speaker.position.y,
-        point.z - speaker.position.z,
-      ),
-    );
-    energy +=
-      10 ** ((reference - attenuation - 20 * Math.log10(distance)) / 10);
-  }
-  return energy > 0 ? 10 * Math.log10(energy) : null;
 }
 /** Broadband MTF proxy only. Not IEC 60268-16 STI: no octave spectra/masking/echoes. */
 export function intelligibilityProxy(
@@ -207,20 +157,19 @@ export function engineeringAudit(state: DeviceState, room: RoomSize) {
   }));
   const failures = visual.filter((s) => !s.results.some((r) => r.pass));
   const field: FieldPoint[] = [];
-  for (let z = -room.depth / 2 + 0.25; z < room.depth / 2; z += 0.5)
-    for (let x = -room.width / 2 + 0.25; x < room.width / 2; x += 0.5) {
-      const spl = directSpl(speakers, { x, y: eyeHeight(room), z });
-      field.push({
-        x,
-        z,
+  for (const { x, y, z } of sampleListeningPlane(room)) {
+    const spl = directSpl(speakers, { x, y, z });
+    field.push({
+      x,
+      z,
+      spl,
+      intelligibility: intelligibilityProxy(
         spl,
-        intelligibility: intelligibilityProxy(
-          spl,
-          state.engineering.noiseDb,
-          state.engineering.rt60,
-        ),
-      });
-    }
+        state.engineering.noiseDb,
+        state.engineering.rt60,
+      ),
+    });
+  }
   const levels = seats
     .map((seat) => directSpl(speakers, seat.position))
     .filter((n): n is number => n !== null);
@@ -261,6 +210,8 @@ export function engineeringAudit(state: DeviceState, room: RoomSize) {
       `Back row: ${Math.min(...back.results.map((r) => r.distance)).toFixed(2)} m to nearest display; increase image height or reduce distance.`,
     );
   const hasReference = (s: PlacedDevice) =>
+    (s.metadata.referenceSplDb !== undefined &&
+      s.metadata.referenceDistanceM !== undefined) ||
     s.metadata.splAt1m != null ||
     (s.metadata.sensitivityDb !== undefined &&
       s.metadata.speakerWatts !== undefined);
