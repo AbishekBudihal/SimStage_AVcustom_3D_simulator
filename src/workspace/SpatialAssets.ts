@@ -318,16 +318,29 @@ export class SpatialAssets {
     carpet.material = this.finish("fabric", 0x78858a);
     group.add(carpet);
     for (const table of layout.tables) {
-      const top = this.rounded(
+      const topColor =
+        room.table?.finish === "walnut"
+          ? 0x644631
+          : room.table?.finish === "white"
+            ? 0xe3e5e1
+            : 0xb18a5f;
+      const top = (
+        room.table?.shape === "rectangular"
+          ? this.box.bind(this)
+          : this.rounded.bind(this)
+      )(
         table.width,
         0.075,
         table.depth,
-        0xb18a5f,
+        topColor,
         table.x,
         table.height - 0.0375,
         table.z,
       );
-      top.material = this.finish("wood", 0xb18a5f);
+      top.material =
+        room.table?.finish === "white"
+          ? this.material(topColor)
+          : this.finish("wood", topColor);
       furniture.add(top);
       furniture.add(
         this.rounded(

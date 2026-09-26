@@ -81,7 +81,15 @@ export type DeviceUpdate = Partial<
   readonly rotation?: Partial<XYZ>;
   readonly metadata?: Partial<DeviceMetadata>;
 };
+export interface TableSettings {
+  readonly width: number;
+  readonly depth: number;
+  readonly height: number;
+  readonly finish: "oak" | "walnut" | "white";
+  readonly shape: "rounded" | "rectangular";
+}
 export interface RoomSize {
+  readonly table?: TableSettings;
   readonly eyeHeightM?: number;
   readonly capacity?: number;
   readonly roomType?: RoomType;
@@ -285,6 +293,13 @@ export function createDeviceStore(): StoreApi<DeviceState> {
         room = Object.freeze({
           ...state.room,
           ...update,
+          table:
+            update.table === undefined &&
+            !Object.prototype.hasOwnProperty.call(update, "table")
+              ? state.room.table
+              : update.table
+                ? Object.freeze({ ...update.table })
+                : undefined,
           ...(update.roomType
             ? { layout: layoutForType(update.roomType) }
             : {}),
@@ -310,8 +325,26 @@ export function createDeviceStore(): StoreApi<DeviceState> {
           room.layout ?? "conference",
         )
       )
-        throw new Error("Room requires width/length 3–30 m and height 2–8 m");
+        throw new Error(
+          "Room requires width/length 3–30 m and height 2–8 m",
+        );
       if (
+        room.table &&
+        (!Number.isFinite(room.table.width) ||
+          !Number.isFinite(room.table.depth) ||
+          !Number.isFinite(room.table.height) ||
+          room.table.width < 0.6 ||
+          room.table.width > 20 ||
+          room.table.depth < 0.6 ||
+          room.table.depth > 20 ||
+          room.table.height < 0.55 ||
+          room.table.height > 1.2 ||
+          !["oak", "walnut", "white"].includes(room.table.finish) ||
+          !["rounded", "rectangular"].includes(room.table.shape))
+      )
+        throw new Error("Invalid table settings");
+      if (
+        JSON.stringify(room.table) === JSON.stringify(state.room.table) &&
         room.eyeHeightM === state.room.eyeHeightM &&
         room.width === state.room.width &&
         room.depth === state.room.depth &&
