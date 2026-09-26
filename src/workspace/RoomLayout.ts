@@ -9,7 +9,7 @@ export interface TableBounds {
   depth: number;
   height: number;
 }
-export function roomLayout(room: RoomSize) {
+function generatedLayout(room: RoomSize) {
   if (room.table) return customTableLayout(room);
   if (room.capacity !== undefined) return capacityLayout(room);
   const tableWidth = Math.min(1.6, room.width - 2.2),
@@ -262,4 +262,59 @@ function customTableLayout(room: RoomSize) {
       });
   }
   return { tables, seats, tableWidth, tableDepth, tableHeight };
+}
+
+/** Furniture edits are room data, shared by rendering, placement and analysis. */
+export function roomLayout(room: RoomSize) {
+  const base = generatedLayout(room);
+  const clamp = (v: number, half: number, size: number) =>
+    Math.max(-size / 2 + half, Math.min(size / 2 - half, v));
+  const tables = base.tables.map((t, i) => {
+    const e = room.furniture?.[`table:${i}`];
+    const width = Math.min(e?.width ?? t.width, room.width - 0.6);
+    const depth = Math.min(e?.depth ?? t.depth, room.depth - 0.6);
+    return {
+      ...t,
+      width,
+      depth,
+      height: e?.height ?? t.height,
+      x: clamp(e?.x ?? t.x, width / 2, room.width),
+      z: clamp(e?.z ?? t.z, depth / 2, room.depth),
+    };
+  });
+  const seats = base.seats.map((s) => {
+    const e = room.furniture?.[`seat:${s.id}`];
+    // Unedited seats follow their closest generated table. Explicit seat positions win.
+    const nearest = base.tables.reduce(
+      (best, t, i) =>
+        Math.hypot(s.position.x - t.x, s.position.z - t.z) <
+        Math.hypot(
+          s.position.x - base.tables[best]!.x,
+          s.position.z - base.tables[best]!.z,
+        )
+          ? i
+          : best,
+      0,
+    );
+    const before = base.tables[nearest],
+      after = tables[nearest];
+    const x =
+      before && after
+        ? after.x + ((s.position.x - before.x) * after.width) / before.width
+        : s.position.x;
+    const z =
+      before && after
+        ? after.z + ((s.position.z - before.z) * after.depth) / before.depth
+        : s.position.z;
+    return {
+      ...s,
+      rotation: e?.rotation ?? s.rotation,
+      position: {
+        ...s.position,
+        x: clamp(e?.x ?? x, 0.3, room.width),
+        z: clamp(e?.z ?? z, 0.3, room.depth),
+      },
+    };
+  });
+  return { ...base, tables, seats };
 }

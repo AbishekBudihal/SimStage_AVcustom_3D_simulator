@@ -133,3 +133,12 @@ Room parameters now include optional table width, length, height, oak/walnut/whi
 Validation: 126/126 active workspace tests passed; production build passed (existing bundle-size warning). Browser checks verified 2.2 x 4.5 x 0.9 m walnut/square furniture, 12 generated seats, recalculated audio summaries and reset to the original 9-seat layout. No console errors were reported.
 
 Google Photorealistic 3D Tiles integration is not implemented in this milestone. Site location and an enabled Map Tiles API project are still required. Google tiles would be exterior visualization context with required attribution; editable architectural geometry must remain independently authored, not extracted or traced from those tiles. See https://developers.google.com/maps/documentation/tile/policies .
+
+
+## Direct furniture editing
+
+`Edit furniture` enables raycast selection and dragging of generated tables and chairs. The inspector edits each table's dimensions and each chair's orientation. Dragging uses a 0.25 m grid (Shift: 0.05 m); Escape, pointer cancellation and window blur roll back the current gesture. Room changes during a gesture invalidate its rollback.
+
+Authored furniture overrides live in `DeviceStore.room.furniture`. `roomLayout` applies the same coordinates to Three.js furniture, listening/viewing seats and automatic tabletop equipment. Unedited seats follow their nearest generated table; explicitly positioned chairs and manually placed equipment remain independent. Resizing a table scales its generated seating offsets. Room bounds clamp the effective furniture footprint without discarding authored coordinates. Changing room type, layout or capacity clears overrides because the generated object identities change; presets also reset them. Per-object and full-layout reset controls are provided.
+
+Furniture-only changes reuse meshes and geometry, retain the camera, and schedule demand-rendered frames. They do not rebuild architectural surfaces or textures. Table meshes scale from their generated dimensions. Overlap prevention, arbitrary table rotation, wall topology editing and installation clearance certification are not implemented. Furniture is not an equipment BOM item. Session data remains in memory.

@@ -112,6 +112,27 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 describe("CanvasManager", () => {
+  it("updates furniture in place without rebuilding geometry or resetting the camera", () => {
+    const table = manager.furnitureTargets.find(
+      (o) => o.userData.furnitureId === "table:0",
+    )!;
+    const shell = manager.scene.getObjectByName("Architectural room");
+    const camera = manager.camera.position.clone();
+    const geometry = (table.children[0] as THREE.Mesh).geometry;
+    manager.selectFurniture("table:0");
+    manager.setRoom({
+      ...manager.room,
+      furniture: { "table:0": { x: 1, width: 2, height: 0.9 } },
+    });
+    expect(manager.scene.getObjectByName("Architectural room")).toBe(shell);
+    expect(manager.furnitureTargets).toContain(table);
+    expect((table.children[0] as THREE.Mesh).geometry).toBe(geometry);
+    expect(table.position.x).toBe(1);
+    expect(table.scale.y).toBeCloseTo(1.2);
+    expect(manager.camera.position).toEqual(camera);
+    flush();
+    expect(frames.size).toBe(0);
+  });
   it("resizes the shadow camera and releases procedural textures when rooms change", () => {
     const textures = new Set<THREE.Texture>();
     manager.scene.getObjectByName("Architectural room")!.traverse((o) => {

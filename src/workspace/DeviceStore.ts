@@ -88,7 +88,16 @@ export interface TableSettings {
   readonly finish: "oak" | "walnut" | "white";
   readonly shape: "rounded" | "rectangular";
 }
+export interface FurnitureEdit {
+  readonly x?: number;
+  readonly z?: number;
+  readonly rotation?: number;
+  readonly width?: number;
+  readonly depth?: number;
+  readonly height?: number;
+}
 export interface RoomSize {
+  readonly furniture?: Readonly<Record<string, FurnitureEdit>>;
   readonly table?: TableSettings;
   readonly eyeHeightM?: number;
   readonly capacity?: number;
@@ -293,6 +302,21 @@ export function createDeviceStore(): StoreApi<DeviceState> {
         room = Object.freeze({
           ...state.room,
           ...update,
+          furniture: Object.freeze(
+            Object.fromEntries(
+              Object.entries(
+                update.furniture ??
+                  ((update.roomType !== undefined &&
+                    update.roomType !== state.room.roomType) ||
+                  (update.layout !== undefined &&
+                    update.layout !== state.room.layout) ||
+                  (update.capacity !== undefined &&
+                    update.capacity !== state.room.capacity)
+                    ? {}
+                    : (state.room.furniture ?? {})),
+              ).map(([id, edit]) => [id, Object.freeze({ ...edit })]),
+            ),
+          ),
           table:
             update.table === undefined &&
             !Object.prototype.hasOwnProperty.call(update, "table")
@@ -325,9 +349,7 @@ export function createDeviceStore(): StoreApi<DeviceState> {
           room.layout ?? "conference",
         )
       )
-        throw new Error(
-          "Room requires width/length 3–30 m and height 2–8 m",
-        );
+        throw new Error("Room requires width/length 3–30 m and height 2–8 m");
       if (
         room.table &&
         (!Number.isFinite(room.table.width) ||
@@ -343,7 +365,25 @@ export function createDeviceStore(): StoreApi<DeviceState> {
           !["rounded", "rectangular"].includes(room.table.shape))
       )
         throw new Error("Invalid table settings");
+      for (const [id, edit] of Object.entries(room.furniture)) {
+        if (
+          !/^(table:\d+|seat:.+)$/.test(id) ||
+          Object.entries(edit).some(
+            ([key, n]) =>
+              !["x", "z", "rotation", "width", "depth", "height"].includes(
+                key,
+              ) ||
+              typeof n !== "number" ||
+              !Number.isFinite(n) ||
+              ((key === "width" || key === "depth") && (n < 0.6 || n > 20)) ||
+              (key === "height" && (n < 0.55 || n > 1.2)),
+          )
+        )
+          throw new Error("Invalid furniture edit");
+      }
       if (
+        JSON.stringify(room.furniture ?? {}) ===
+          JSON.stringify(state.room.furniture ?? {}) &&
         JSON.stringify(room.table) === JSON.stringify(state.room.table) &&
         room.eyeHeightM === state.room.eyeHeightM &&
         room.width === state.room.width &&

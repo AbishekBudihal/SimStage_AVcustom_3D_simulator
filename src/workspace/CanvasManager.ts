@@ -1,5 +1,5 @@
 import type { AudioAnalysis } from "./AudioEngineering";
-import { eyeHeight } from "./RoomLayout";
+import { roomLayout, eyeHeight } from "./RoomLayout";
 import type { OpticalResult } from "./OpticalEngineering";
 import { SpatialOverlays, type WorkspaceMode } from "./SpatialOverlays";
 import { ViewportNavigation, orthographicFit } from "./ViewportNavigation";
@@ -22,6 +22,7 @@ import {
 
 export type WorkspaceView = "plan" | "isometric" | "seat" | "front";
 export interface CanvasManagerOptions {
+  readonly onFurnitureSelect?: (id: string | null) => void;
   readonly onSelect: (id: string | null) => void;
   readonly room?: RoomSize;
   readonly onCableSelect?: (id: string | null) => void;
@@ -45,6 +46,12 @@ export class CanvasManager {
     return this.activeCamera;
   }
   readonly renderer: THREE.WebGLRenderer;
+  furnitureEditing = false;
+  private selectedFurniture: string | null = null;
+  private furnitureOutline: THREE.BoxHelper | undefined;
+  get furnitureTargets(): THREE.Object3D[] {
+    return this.roomGroup.getObjectByName("Furniture")?.children ?? [];
+  }
   readonly pickTargets: THREE.Object3D[] = [];
   private currentRoom: RoomSize;
   get room(): RoomSize {
@@ -135,7 +142,8 @@ export class CanvasManager {
       this.renderer.domElement,
       () => this.camera,
       this.invalidate,
-      (e) => !!this.pickDevice(e),
+      (e) =>
+        this.furnitureEditing ? !!this.pickFurniture(e) : !!this.pickDevice(e),
       () => Math.max(this.room.width, this.room.depth),
     );
     this.renderer.domElement.addEventListener("dblclick", this.doubleClick);
@@ -166,6 +174,36 @@ export class CanvasManager {
   setRoom(room: RoomSize): void {
     if (this.disposed || this.currentRoom === room) return;
     snapToSurface({ x: 0, y: 0, z: 0 }, "floor", room);
+    const { furniture: _old, ...previousShell } = this.currentRoom;
+    const { furniture: _next, ...nextShell } = room;
+    if (JSON.stringify(previousShell) === JSON.stringify(nextShell)) {
+      this.currentRoom = room;
+      const layout = roomLayout(room);
+      for (const object of this.furnitureTargets) {
+        const id = object.userData.furnitureId as string;
+        if (id.startsWith("table:")) {
+          const table = layout.tables[Number(id.slice(6))];
+          const original = object.userData.dimensions;
+          if (table && original) {
+            object.position.set(table.x, 0, table.z);
+            object.scale.set(
+              table.width / original.width,
+              table.height / original.height,
+              table.depth / original.depth,
+            );
+          }
+        } else {
+          const seat = layout.seats.find((s) => `seat:${s.id}` === id);
+          if (seat) {
+            object.position.set(seat.position.x, 0, seat.position.z);
+            object.rotation.y = seat.rotation;
+          }
+        }
+      }
+      this.updateFurnitureOutline();
+      this.invalidate();
+      return;
+    }
     this.scene.remove(this.roomGroup, this.grid);
     this.roomAssets.dispose();
     this.grid.geometry.dispose();
@@ -180,6 +218,7 @@ export class CanvasManager {
     this.grid = new THREE.GridHelper(size, size * 2, 0x526075, 0x29313e);
     this.grid.position.y = 0.033;
     this.scene.add(this.roomGroup, this.grid);
+    this.updateFurnitureOutline();
     this.fitLighting();
     this.distance = Math.max(room.width, room.depth, room.height) * 2;
     this.setView(this.view, false);
@@ -336,6 +375,12 @@ export class CanvasManager {
     if (this.disposed || !event.isPrimary || event.button !== 0) return;
     const rect = this.renderer.domElement.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
+    if (this.furnitureEditing) {
+      const id = this.pickFurniture(event);
+      this.selectFurniture(id);
+      this.options.onFurnitureSelect?.(id);
+      return;
+    }
     const deviceId = this.pickDevice(event);
     if (!deviceId && this.overlays?.cables.length) {
       this.raycaster.params.Line = { threshold: 0.13 };
@@ -364,6 +409,44 @@ export class CanvasManager {
     this.raycaster.setFromCamera(this.pointer, this.camera);
     const hit = this.raycaster.intersectObjects(this.pickTargets, true)[0];
     return hit?.object.userData.deviceId ?? null;
+  }
+
+  setFurnitureEditing(enabled: boolean): void {
+    this.furnitureEditing = enabled;
+    this.navigation?.stop();
+    this.renderer.domElement.style.cursor = enabled ? "grab" : "";
+    if (!enabled) this.selectFurniture(null);
+  }
+  selectFurniture(id: string | null): void {
+    this.selectedFurniture = id;
+    this.updateFurnitureOutline();
+    this.invalidate();
+  }
+  private updateFurnitureOutline(): void {
+    const object = this.furnitureTargets.find(
+      (o) => o.userData.furnitureId === this.selectedFurniture,
+    );
+    if (!object) {
+      if (this.furnitureOutline) this.furnitureOutline.visible = false;
+      return;
+    }
+    if (!this.furnitureOutline) {
+      this.furnitureOutline = new THREE.BoxHelper(object, 0x38bdf8);
+      this.furnitureOutline.material.depthTest = false;
+      this.furnitureOutline.renderOrder = 10;
+      this.scene.add(this.furnitureOutline);
+    }
+    this.roomGroup.updateMatrixWorld(true);
+    this.furnitureOutline.setFromObject(object);
+    this.furnitureOutline.visible = true;
+  }
+  pickFurniture(event: { clientX: number; clientY: number }): string | null {
+    // Reuse the same camera ray as equipment picking.
+    this.pickDevice(event);
+    return (
+      this.raycaster.intersectObjects(this.furnitureTargets, true)[0]?.object
+        .userData.furnitureId ?? null
+    );
   }
 
   placementPoint(
@@ -676,6 +759,8 @@ export class CanvasManager {
     this.renderer.domElement.removeEventListener("dblclick", this.doubleClick);
     window.removeEventListener?.("resize", this.onWindowResize);
     this.keyLight.shadow.dispose();
+    this.furnitureOutline?.geometry.dispose();
+    this.furnitureOutline?.material.dispose();
     this.assets.dispose();
     this.roomAssets.dispose();
     if (this.visualBoundary) {

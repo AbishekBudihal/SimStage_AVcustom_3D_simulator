@@ -1,3 +1,5 @@
+import { FurnitureInspector } from "./components/FurnitureInspector";
+import { useFurnitureDrag } from "./workspace/useFurnitureDrag";
 import { AudioAnalysisPanel } from "./components/AudioAnalysisPanel";
 import { analyzeAudio } from "./workspace/AudioEngineering";
 import { OpticalAnalysisPanel } from "./components/OpticalAnalysisPanel";
@@ -22,6 +24,10 @@ import { EngineeringPanel } from "./components/EngineeringPanel";
 import "./workspace.css";
 export default function App() {
   const [store] = useState(createWorkspace);
+  const [furnitureEditing, setFurnitureEditing] = useState(false);
+  const [selectedFurniture, setSelectedFurniture] = useState<string | null>(
+    null,
+  );
   const selectedId = useStore(store.api, (s) => s.selectedId);
   const devices = useStore(store.api, (s) => s.devices),
     connections = useStore(store.api, (s) => s.connections),
@@ -112,12 +118,16 @@ export default function App() {
   const [ready, setReady] = useState(false),
     [error, setError] = useState<string | null>(null);
   useEffect(() => {
+    canvas.current?.setFurnitureEditing(furnitureEditing);
+  }, [furnitureEditing, ready]);
+  useEffect(() => {
     if (!host.current) return;
     let manager: CanvasManager;
     try {
       manager = new CanvasManager(host.current, {
         room: store.api.getState().room,
         onCableSelect: setSelectedCable,
+        onFurnitureSelect: setSelectedFurniture,
         onSelect: (id) => store.api.getState().selectDevice(id),
       });
     } catch (cause) {
@@ -131,10 +141,12 @@ export default function App() {
       manager.syncDevices(state.devices, state.selectedId);
     };
     const unsubscribe = store.api.subscribe(sync),
-      disposeDrag = useDeviceDrag(manager, store);
+      disposeDrag = useDeviceDrag(manager, store),
+      disposeFurnitureDrag = useFurnitureDrag(manager, store);
     sync();
     setReady(true);
     return () => {
+      disposeFurnitureDrag();
       disposeDrag();
       unsubscribe();
       manager.dispose();
@@ -264,6 +276,12 @@ export default function App() {
               />
             </div>
             <div className="analysis-toolbar">
+              <button
+                aria-pressed={furnitureEditing}
+                onClick={() => setFurnitureEditing((v) => !v)}
+              >
+                {furnitureEditing ? "Furniture editing on" : "Edit furniture"}
+              </button>
               <label>
                 Workspace mode{" "}
                 <select
@@ -411,8 +429,9 @@ export default function App() {
             )}
             <div className="canvas-footer">
               <span>
-                Drag empty space: orbit · Wheel: zoom · Right/middle drag: pan ·
-                Drag device: move · Double-click: focus
+                {furnitureEditing
+                  ? "Drag table/chair: move · 0.25 m snap · Shift: 0.05 m · Escape: cancel · Empty space: orbit"
+                  : "Drag empty space: orbit · Wheel: zoom · Right/middle drag: pan · Drag device: move · Double-click: focus"}
               </span>
               <span>{Object.keys(devices).length} devices</span>
             </div>
@@ -420,6 +439,9 @@ export default function App() {
           {tab === "schematic" && <SchematicCanvas store={store} />}
         </section>
         <aside className="panel status-panel" aria-label="System health">
+          {furnitureEditing && (
+            <FurnitureInspector store={store} selected={selectedFurniture} />
+          )}
           <p className="eyebrow">LIVE ENGINEERING</p>
           <h2>Design health</h2>
           {(mode === "camera" || mode === "display") && (
@@ -445,7 +467,7 @@ export default function App() {
             selectSeat={setSelectedSeat}
           />
           <EngineeringPanel store={store} audit={audit} />
-          <PropertyInspector store={store} room={room} />
+          {!furnitureEditing && <PropertyInspector store={store} room={room} />}
           <p className="session-note">
             Concept layout only. Reloading clears changes. Spatial routes are
             straight-line estimates, not installation cable schedules.

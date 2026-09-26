@@ -51,6 +51,7 @@ export function useDeviceDrag(
   };
   const down = (event: PointerEvent): void => {
     if (
+      canvas.furnitureEditing ||
       disposed ||
       active ||
       !event.isPrimary ||
