@@ -17,6 +17,7 @@ import {
 
 type RecordData = Record<string, unknown>;
 export interface CatalogProfile {
+  readonly revision: string;
   readonly id: string;
   readonly manufacturer: string;
   readonly model: string;
@@ -83,6 +84,22 @@ export function parseCatalog(
   input: unknown,
   sourceFile = "uploaded JSON",
 ): readonly CatalogProfile[] {
+  if (!Array.isArray(input)) {
+    const database = record(input, "catalog database");
+    if (database.schemaVersion !== 2)
+      throw new Error("Unsupported catalog schema version");
+    if (database.units !== undefined) {
+      const units = record(database.units, "catalog units");
+      if (
+        units.dimensions !== "m" ||
+        units.weight !== "kg" ||
+        units.power !== "W" ||
+        units.heat !== "BTU/h"
+      )
+        throw new Error("Catalog units must be m, kg, W and BTU/h");
+    }
+    input = database.parts;
+  }
   if (!Array.isArray(input) || input.length > 5000)
     throw new Error("Catalog must be an array of at most 5000 records");
   const ids = new Set<string>();
@@ -306,6 +323,10 @@ export function parseCatalog(
         .filter(Boolean)
         .join(" ");
       return freeze({
+        revision:
+          raw.revision === undefined
+            ? "unspecified"
+            : string(raw.revision, "revision"),
         id,
         manufacturer,
         model,
@@ -317,6 +338,7 @@ export function parseCatalog(
         ports,
         metadata: {
           ...audio,
+          weightKg: number(physical.weightKg, "weightKg") ?? null,
           label: `${manufacturer} ${model}`,
           powerWatts: watts,
           heatBtuPerHour: heat,
@@ -382,5 +404,14 @@ export function deviceFromProfile(
       ...profile.metadata,
       label: `${profile.metadata.label} ${index + 1}`,
     },
+  };
+}
+
+/** Versioned portable database. Raw manufacturer claims and sources remain intact. */
+export function exportCatalog(profiles: readonly CatalogProfile[]) {
+  return {
+    schemaVersion: 2,
+    units: { dimensions: "m", weight: "kg", power: "W", heat: "BTU/h" },
+    parts: profiles.map((p) => structuredClone(p.raw)),
   };
 }

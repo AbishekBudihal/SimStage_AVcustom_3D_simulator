@@ -26,7 +26,12 @@ export function CustomProduct({
               manufacturer: text("manufacturer") || "User-defined",
               model: text("model"),
               category,
+              revision: text("revision") || "user-1",
+              powerWatts: n("powerWatts"),
+              heatBtuPerHour: n("heatBtuPerHour"),
+              rackUnits: n("rackUnits"),
               physical: {
+                weightKg: n("weightKg"),
                 width: n("width"),
                 height: n("height"),
                 depth: n("depth"),
@@ -100,6 +105,27 @@ export function CustomProduct({
               min="0.001"
               max="100"
               step="any"
+            />
+          </label>
+        ))}
+        <label>
+          Revision
+          <input name="revision" placeholder="user-1" />
+        </label>
+        {[
+          ["weightKg", "Weight (kg)"],
+          ["powerWatts", "Electrical load (W)"],
+          ["heatBtuPerHour", "Heat dissipation (BTU/h)"],
+          ["rackUnits", "Rack units"],
+        ].map(([key, label]) => (
+          <label key={key}>
+            {label}
+            <input
+              name={key}
+              type="number"
+              min="0"
+              step="any"
+              placeholder="Unknown"
             />
           </label>
         ))}

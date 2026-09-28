@@ -112,6 +112,26 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 describe("CanvasManager", () => {
+  it("adds independent camera layers and releases their resources when disabled", () => {
+    const store = createWorkspace();
+    const camera = store.snapshot().find((d) => d.kind === "ptz_camera")!;
+    store.update(camera.id, {
+      metadata: { horizontalFovDeg: 90, verticalFovDeg: 60 },
+    });
+    const before = manager.scene.children.length;
+    manager.setCameraLayers(true, store.api.getState());
+    expect(manager.scene.children.length).toBe(before + 1);
+    const layer = manager.scene.children[manager.scene.children.length - 1];
+    const firstLine = layer.children.find(
+      (o) => o instanceof THREE.Line,
+    ) as THREE.Line;
+    const dispose = vi.spyOn(firstLine.geometry, "dispose");
+    manager.setCameraLayers(false, store.api.getState());
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(manager.scene.children.length).toBe(before);
+    flush();
+    expect(frames.size).toBe(0);
+  });
   it("updates furniture in place without rebuilding geometry or resetting the camera", () => {
     const table = manager.furnitureTargets.find(
       (o) => o.userData.furnitureId === "table:0",

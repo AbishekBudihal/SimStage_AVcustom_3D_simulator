@@ -1,3 +1,4 @@
+import { SignalTrafficPanel } from "./SignalTrafficPanel";
 import { importSchematic } from "../workspace/SchematicImport";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { useStore } from "zustand";
@@ -143,6 +144,7 @@ export function SchematicCanvas({ store }: { store: DeviceStore }) {
           Delete wire
         </button>
       </div>
+      <SignalTrafficPanel store={store} state={state} selected={wire} />
       <div className="schematic-message" role="status">
         {error ||
           (pending

@@ -43,6 +43,11 @@ export function BOMDrawer({ store }: { store: DeviceStore }) {
             passive speaker drive excludes amplifier mains consumption. See
             hardware sources in the inspector.
           </p>
+          <p className="text-xs">
+            Known equipment weight: {bom.weight.toFixed(2)} kg ·{" "}
+            {bom.unknownWeight} devices with unknown weight. Not a structural
+            load certification.
+          </p>
           <table className="w-full border-collapse text-left text-xs">
             <thead className="text-slate-400">
               <tr>
@@ -51,6 +56,7 @@ export function BOMDrawer({ store }: { store: DeviceStore }) {
                   "Qty",
                   "Known power",
                   "Known heat",
+                  "Known weight",
                 ].map((label) => (
                   <th
                     key={label}
@@ -84,6 +90,10 @@ export function BOMDrawer({ store }: { store: DeviceStore }) {
                         ({row.unknownHeat} unknown)
                       </span>
                     )}
+                  </td>
+                  <td>
+                    {row.weight.toFixed(2)} kg{" "}
+                    {row.unknownWeight > 0 && `(${row.unknownWeight} unknown)`}
                   </td>
                 </tr>
               ))}

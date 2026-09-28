@@ -1,3 +1,4 @@
+import { exportCatalog } from "../workspace/catalog";
 import { CustomProduct } from "./CustomProduct";
 import {
   CATEGORIES,
@@ -28,6 +29,22 @@ export function CatalogLibrary({
   return (
     <>
       <h1>Simulator catalog</h1>
+      <button
+        onClick={() => {
+          const url = URL.createObjectURL(
+            new Blob([JSON.stringify(exportCatalog(catalog), null, 2)], {
+              type: "application/json",
+            }),
+          );
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "simstage-catalog-v2.json";
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }}
+      >
+        Export catalog database
+      </button>
       <p className="muted">
         {catalog.length} source records. Imported estimates retain their
         original provenance; missing specifications stay unknown.
@@ -142,6 +159,10 @@ export function CatalogLibrary({
               <p>
                 {item.dimensions.x} × {item.dimensions.y} × {item.dimensions.z}{" "}
                 m
+              </p>
+              <p>
+                Revision: {item.revision} · Weight{" "}
+                {specificationText(item.metadata.weightKg)} kg
               </p>
               <p>Mounting: {item.surfaces.join(", ")}</p>
               <p>

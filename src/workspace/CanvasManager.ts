@@ -1,3 +1,4 @@
+import { cameraCoverage } from "./OpticalEngineering";
 import type { AudioAnalysis } from "./AudioEngineering";
 import { roomLayout, eyeHeight } from "./RoomLayout";
 import type { OpticalResult } from "./OpticalEngineering";
@@ -83,6 +84,7 @@ export class CanvasManager {
   private fittedSpan = 1;
   private fitBounds: THREE.Box3 | undefined;
   private overlays: SpatialOverlays | undefined;
+  private cameraLayers = new Map<string, SpatialOverlays>();
   private onWindowResize = () => this.resize();
   private doubleClick = () => this.focusSelected();
 
@@ -576,6 +578,28 @@ export class CanvasManager {
     );
     this.invalidate();
   }
+  setCameraLayers(enabled: boolean, state: DeviceState): void {
+    const devices = enabled
+      ? Object.values(state.devices).filter(
+          (d): d is PlacedDevice => !!d && d.kind === "ptz_camera",
+        )
+      : [];
+    const ids = new Set(devices.map((d) => d.id));
+    for (const [id, layer] of this.cameraLayers)
+      if (!ids.has(id)) {
+        layer.dispose();
+        this.cameraLayers.delete(id);
+      }
+    for (const d of devices) {
+      let layer = this.cameraLayers.get(d.id);
+      if (!layer) {
+        layer = new SpatialOverlays(this.scene);
+        this.cameraLayers.set(d.id, layer);
+      }
+      layer.update("camera", state, "All", null, cameraCoverage(d, state.room));
+    }
+    this.invalidate();
+  }
   setView(view: WorkspaceView, _animate = true): void {
     if (this.disposed) return;
     this.navigation?.stop();
@@ -756,6 +780,8 @@ export class CanvasManager {
     this.observer.disconnect();
     this.navigation?.dispose();
     this.overlays?.dispose();
+    this.cameraLayers.forEach((layer) => layer.dispose());
+    this.cameraLayers.clear();
     this.renderer.domElement.removeEventListener("dblclick", this.doubleClick);
     window.removeEventListener?.("resize", this.onWindowResize);
     this.keyLight.shadow.dispose();

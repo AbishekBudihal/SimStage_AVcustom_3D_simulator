@@ -1,3 +1,5 @@
+import { ScenarioPanel } from "./components/ScenarioPanel";
+import { viewingField } from "./workspace/ViewingField";
 import { FurnitureInspector } from "./components/FurnitureInspector";
 import { useFurnitureDrag } from "./workspace/useFurnitureDrag";
 import { AudioAnalysisPanel } from "./components/AudioAnalysisPanel";
@@ -24,6 +26,10 @@ import { EngineeringPanel } from "./components/EngineeringPanel";
 import "./workspace.css";
 export default function App() {
   const [store] = useState(createWorkspace);
+  const [floorLayer, setFloorLayer] = useState<
+    "auto" | "off" | "spl" | "viewing" | "microphone"
+  >("auto");
+  const [cameraLayer, setCameraLayer] = useState(false);
   const [furnitureEditing, setFurnitureEditing] = useState(false);
   const [selectedFurniture, setSelectedFurniture] = useState<string | null>(
     null,
@@ -155,7 +161,29 @@ export default function App() {
   }, [store]);
   useEffect(() => {
     const manager = canvas.current;
-    if (audio)
+    if (floorLayer === "viewing")
+      manager?.setHeatmap("coverage", viewingField(store.api.getState()));
+    else if (floorLayer === "spl" || floorLayer === "microphone") {
+      const field = floorLayer === "spl" ? roomSpeaker.field : roomMic.field;
+      manager?.setHeatmap(
+        floorLayer === "spl" ? "spl" : "coverage",
+        field.map((p) => ({
+          x: p.x,
+          z: p.z,
+          spl:
+            floorLayer === "spl"
+              ? p.spl
+              : p.status === "unknown"
+                ? null
+                : p.status === "covered"
+                  ? 1
+                  : p.status === "edge"
+                    ? 0.5
+                    : 0,
+          intelligibility: null,
+        })),
+      );
+    } else if (floorLayer === "auto" && audio)
       manager?.setHeatmap(
         mode === "speaker" && audioLayer === "spl" ? "spl" : "coverage",
         audio.field.map((p) => ({
@@ -175,7 +203,8 @@ export default function App() {
         })),
       );
     else manager?.setHeatmap("off");
-    manager?.setVisualOverlay(false, audit.visual);
+    manager?.setCameraLayers(cameraLayer, store.api.getState());
+    manager?.setVisualOverlay(floorLayer === "viewing", audit.visual);
     manager?.setVisualCones(false, devices, settings);
     manager?.setWorkspaceMode(
       mode,
@@ -187,6 +216,10 @@ export default function App() {
       audio,
     );
   }, [
+    floorLayer,
+    cameraLayer,
+    roomMic,
+    roomSpeaker,
     audio,
     audioLayer,
     optical,
@@ -275,6 +308,48 @@ export default function App() {
                 disabled={!ready || !!error}
               />
             </div>
+            <div className="analysis-toolbar">
+              <label>
+                Floor analysis{" "}
+                <select
+                  aria-label="Floor analysis layer"
+                  value={floorLayer}
+                  onChange={(e) =>
+                    setFloorLayer(e.target.value as typeof floorLayer)
+                  }
+                >
+                  <option value="auto">Follow workspace mode</option>
+                  <option value="off">Off</option>
+                  <option value="spl">Acoustic SPL</option>
+                  <option value="microphone">Microphone coverage</option>
+                  <option value="viewing">Viewing / DISCAS planning</option>
+                </select>
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={cameraLayer}
+                  onChange={(e) => setCameraLayer(e.target.checked)}
+                />
+                Camera FOV layer
+              </label>
+            </div>
+            {cameraLayer && (
+              <div className="px-4 py-1 text-xs text-slate-300">
+                Camera volumes use declared horizontal and vertical FOV. Missing
+                angles remain unknown; walls clip the volume but furniture
+                occlusion is not modeled.
+              </div>
+            )}
+            {floorLayer !== "auto" && floorLayer !== "off" && (
+              <div className="px-4 py-1 text-xs text-slate-300" role="status">
+                {floorLayer === "spl"
+                  ? "SPL estimate: blue 40 → green 65 → red 90 dB; grey = unknown. Free field; listener-height samples projected to floor."
+                  : "Green: within planning limits · Amber: edge · Red: outside · Grey: unknown. Listener-height samples projected to floor."}
+                {floorLayer === "viewing" &&
+                  " Public BDM + 4/6/8 and project off-axis limits; full DISCAS compliance unverified."}
+              </div>
+            )}
             <div className="analysis-toolbar">
               <button
                 aria-pressed={furnitureEditing}
@@ -444,6 +519,7 @@ export default function App() {
           )}
           <p className="eyebrow">LIVE ENGINEERING</p>
           <h2>Design health</h2>
+          <ScenarioPanel store={store} />
           {(mode === "camera" || mode === "display") && (
             <OpticalAnalysisPanel
               store={store}
