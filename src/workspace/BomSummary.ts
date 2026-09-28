@@ -3,6 +3,8 @@ export interface BomRow {
   catalogId: string;
   kind: DeviceKind;
   quantity: number;
+  weight: number;
+  unknownWeight: number;
   power: number;
   heat: number;
   unknownPower: number;
@@ -13,7 +15,9 @@ export function summarizeBom(devices: DeviceState["devices"]) {
   let count = 0,
     power = 0,
     heat = 0,
-    incomplete = 0;
+    incomplete = 0,
+    weight = 0,
+    unknownWeight = 0;
   for (const device of Object.values(devices)) {
     if (!device) continue;
     const key = JSON.stringify([device.catalogId, device.kind]);
@@ -21,11 +25,20 @@ export function summarizeBom(devices: DeviceState["devices"]) {
       catalogId: device.catalogId,
       kind: device.kind,
       quantity: 0,
+      weight: 0,
+      unknownWeight: 0,
       power: 0,
       heat: 0,
       unknownPower: 0,
       unknownHeat: 0,
     };
+    if (device.metadata.weightKg == null) {
+      row.unknownWeight++;
+      unknownWeight++;
+    } else {
+      row.weight += device.metadata.weightKg;
+      weight += device.metadata.weightKg;
+    }
     row.quantity++;
     count++;
     const watts = device.metadata.powerWatts,
@@ -43,5 +56,13 @@ export function summarizeBom(devices: DeviceState["devices"]) {
     if (watts === null || btu === null) incomplete++;
     groups.set(key, row);
   }
-  return { rows: [...groups.values()], count, power, heat, incomplete };
+  return {
+    rows: [...groups.values()],
+    count,
+    power,
+    heat,
+    incomplete,
+    weight,
+    unknownWeight,
+  };
 }

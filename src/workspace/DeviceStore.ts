@@ -1,3 +1,11 @@
+import {
+  DEFAULT_SCENARIO,
+  validateScenario,
+  validateTraffic,
+  canDeclareTraffic,
+  type ScenarioConfig,
+  type DanteTraffic,
+} from "./ScenarioSimulation";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { INITIAL_CATALOG, parseCatalog, type CatalogProfile } from "./catalog";
 import { solvePlacements, type Placement } from "./PlacementSolver";
@@ -35,6 +43,7 @@ export interface DevicePort {
   readonly notes?: string;
 }
 export interface DeviceMetadata {
+  readonly weightKg?: number | null;
   readonly micPattern?: string;
   readonly micModel?: "omni" | "cone" | "horizontal_sector" | "radius_only";
   readonly micRadiusM?: number;
@@ -116,6 +125,7 @@ export interface Endpoint {
   readonly portId: string;
 }
 export interface Connection {
+  readonly traffic?: Readonly<DanteTraffic>;
   readonly id: string;
   readonly from: Endpoint;
   readonly to: Endpoint;
@@ -133,6 +143,9 @@ export interface EngineeringSettings {
   readonly heatBudget: number;
 }
 export interface DeviceState {
+  readonly scenario: Readonly<ScenarioConfig>;
+  setScenario(update: Partial<ScenarioConfig>): void;
+  setConnectionTraffic(id: string, traffic: DanteTraffic | undefined): void;
   readonly room: RoomSize;
   readonly catalog: readonly CatalogProfile[];
   importCatalog(input: unknown, sourceFile?: string): void;
@@ -241,6 +254,11 @@ function freezeDevice(input: PlacedDevice): PlacedDevice {
       input.metadata.splAt1m > 150)
   )
     throw new Error("SPL must be 0–150 dB");
+  if (
+    input.metadata.weightKg != null &&
+    (!Number.isFinite(input.metadata.weightKg) || input.metadata.weightKg < 0)
+  )
+    throw new Error("Invalid weight");
   for (const value of [
     input.metadata.powerWatts,
     input.metadata.heatBtuPerHour,
@@ -444,6 +462,31 @@ export function createDeviceStore(): StoreApi<DeviceState> {
         ]),
       );
       set({ room, roomPreset: id, devices: solvePlacements(devices, room) });
+    },
+    scenario: DEFAULT_SCENARIO,
+    setScenario(update) {
+      const next = { ...get().scenario, ...update };
+      validateScenario(next);
+      set({ scenario: Object.freeze(next) });
+    },
+    setConnectionTraffic(id, traffic) {
+      const state = get(),
+        connection = state.connections.find((c) => c.id === id);
+      if (!connection || !canDeclareTraffic(connection))
+        throw new Error("Select a Dante or Ethernet connection");
+      if (traffic) validateTraffic(traffic);
+      set({
+        connections: Object.freeze(
+          state.connections.map((c) =>
+            c.id === id
+              ? Object.freeze({
+                  ...c,
+                  traffic: traffic ? Object.freeze({ ...traffic }) : undefined,
+                })
+              : c,
+          ),
+        ),
+      });
     },
     devices: Object.freeze({}),
     selectedId: null,
