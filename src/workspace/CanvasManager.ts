@@ -1,3 +1,5 @@
+import { PressureOverlay } from "./PressureOverlay";
+import type { PressureResult, PressureSettings } from "./PressureModel";
 import { cameraCoverage } from "./OpticalEngineering";
 import type { AudioAnalysis } from "./AudioEngineering";
 import { roomLayout, eyeHeight } from "./RoomLayout";
@@ -84,6 +86,7 @@ export class CanvasManager {
   private fittedSpan = 1;
   private fitBounds: THREE.Box3 | undefined;
   private overlays: SpatialOverlays | undefined;
+  private pressureOverlay: PressureOverlay | undefined;
   private cameraLayers = new Map<string, SpatialOverlays>();
   private onWindowResize = () => this.resize();
   private doubleClick = () => this.focusSelected();
@@ -578,6 +581,16 @@ export class CanvasManager {
     );
     this.invalidate();
   }
+  setPressureMap(
+    result: PressureResult | null,
+    settings: PressureSettings,
+  ): void {
+    if (this.disposed) return;
+    if (!this.pressureOverlay && result)
+      this.pressureOverlay = new PressureOverlay(this.scene);
+    this.pressureOverlay?.update(result, settings);
+    this.invalidate();
+  }
   setCameraLayers(enabled: boolean, state: DeviceState): void {
     const devices = enabled
       ? Object.values(state.devices).filter(
@@ -779,6 +792,7 @@ export class CanvasManager {
     this.renderer.domElement.removeEventListener("pointerdown", this.select);
     this.observer.disconnect();
     this.navigation?.dispose();
+    this.pressureOverlay?.dispose();
     this.overlays?.dispose();
     this.cameraLayers.forEach((layer) => layer.dispose());
     this.cameraLayers.clear();
