@@ -1,3 +1,4 @@
+import { validateBands, type AcousticBand } from "./PressureModel";
 import type { CatalogCategory } from "./CatalogQuery";
 import { defaultIntent } from "./PlacementSolver";
 import displays from "../../data/displays.json";
@@ -250,6 +251,22 @@ export function parseCatalog(
         )
           imageHeightM = (diagonal * 0.0254 * ratio[1]) / Math.hypot(...ratio);
       }
+      let acousticBands: AcousticBand[] | undefined;
+      if (speaker.responseBands !== undefined) {
+        if (!Array.isArray(speaker.responseBands))
+          throw new Error("speaker.responseBands must be an array");
+        acousticBands = speaker.responseBands.map((value) => {
+          const b = record(value, "response band");
+          return {
+            hz: number(b.hz, "frequency") ?? NaN,
+            sensitivityDb: number(b.sensitivityDb, "band sensitivity") ?? NaN,
+            horizontalDeg:
+              number(b.horizontalDeg, "horizontal dispersion") ?? NaN,
+            verticalDeg: number(b.verticalDeg, "vertical dispersion") ?? NaN,
+          };
+        });
+        validateBands(acousticBands);
+      }
       const sensitivityDb = number(speaker.sensitivityDb, "sensitivityDb");
       const coverageDegrees = number(speaker.dispersionDeg, "dispersionDeg");
       if (
@@ -317,7 +334,7 @@ export function parseCatalog(
           ? "Image height uses provided value or diagonal/aspect-ratio geometry."
           : "Image height unspecified.",
         sensitivityDb !== undefined
-          ? "SPL assumes 1 W drive initially; reference impedance/taps require verification."
+          ? "SPL uses declared drive power or defaults to 1 W; reference impedance/taps require verification."
           : "",
       ]
         .filter(Boolean)
@@ -347,9 +364,12 @@ export function parseCatalog(
           verticalFovDeg: number(camera.verticalFovDeg, "VFOV"),
           imageHeightM,
           sensitivityDb,
+          acousticBands,
           coverageDegrees,
           maxSpl: number(speaker.maxSplAt1m, "maxSplAt1m"),
-          speakerWatts: sensitivityDb !== undefined ? 1 : undefined,
+          speakerWatts:
+            number(speaker.drivePowerW, "drivePowerW") ??
+            (sensitivityDb !== undefined ? 1 : undefined),
           splAt1m: number(speaker.splAt1m, "SPL at 1m") ?? null,
           powerBasis:
             watts === null

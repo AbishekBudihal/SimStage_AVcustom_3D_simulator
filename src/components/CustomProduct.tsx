@@ -1,3 +1,4 @@
+import { parseBandText } from "../workspace/PressureModel";
 import { useState } from "react";
 import type { DeviceStore } from "../workspace/DeviceStore";
 import { CATEGORIES, type CatalogCategory } from "../workspace/CatalogQuery";
@@ -56,6 +57,9 @@ export function CustomProduct({
                 pickupAngleDeg: n("pickupAngle"),
               },
               speaker: {
+                sensitivityDb: n("sensitivityDb"),
+                drivePowerW: n("drivePowerW"),
+                responseBands: parseBandText(text("responseBands")),
                 horizontalDispersionDeg: n("hDispersion"),
                 verticalDispersionDeg: n("vDispersion"),
                 referenceSplDb: n("referenceSpl"),
@@ -108,6 +112,36 @@ export function CustomProduct({
             />
           </label>
         ))}
+        <details>
+          <summary>Speaker pressure model (optional)</summary>
+          <label>
+            Sensitivity (dB SPL, 1 W / 1 m)
+            <input
+              name="sensitivityDb"
+              type="number"
+              min="0"
+              max="150"
+              step="any"
+            />
+          </label>
+          <label>
+            Test-signal drive power (W)
+            <input name="drivePowerW" type="number" min="0" step="any" />
+          </label>
+          <label>
+            Frequency response rows
+            <textarea
+              name="responseBands"
+              rows={3}
+              placeholder={"125, 88, 180, 180\n8000, 86, 60, 45"}
+            />
+          </label>
+          <p className="fine-print">
+            Rows: Hz, sensitivity dB, horizontal degrees, vertical degrees.
+            Blank rows use a flat sensitivity and the dispersion fields below.
+            Entered data is a planning estimate.
+          </p>
+        </details>
         <label>
           Revision
           <input name="revision" placeholder="user-1" />

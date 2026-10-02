@@ -99,7 +99,6 @@ Room dimensions initialize from `createDefaultRoom()` in the supplied RoomModel 
 
 Visual seat markers and cyan viewing-region boundaries use the same live image height, orientation, content and angle checks. Boundaries sample the region at 0.25 m on the 1.2 m seating plane and project it onto the floor; they are discrete planning contours, not certified DISCAS boundaries. Unknown image heights produce no region. SPL samples use live speaker coordinates and room dimensions. Audio analysis supports all-room or selected-device scope; the room summary always includes all matching devices.
 
-
 ## Capacity and semantic placement
 
 Room state now accepts `roomType` and optional `capacity` (0–200). Eight semantic types map to meeting-table or teaching-desk layouts. Capacity is a request: seating stops at the available geometric capacity and the audit reports any shortfall. Presets populate editable fields only. A missing capacity retains automatic sizing. These spacing rules are design assumptions, not circulation/accessibility certification.
@@ -109,13 +108,23 @@ Products added by clicking inventory or by schematic import without XYZ receive 
 Schematic JSON import adds nodes from existing catalog IDs and validates all endpoints transactionally before publishing. Format:
 
 ```json
-{"nodes":[{"id":"display","catalogId":"samsung-qm75b"},{"id":"camera","catalogId":"yealink-uvc86"}],"connections":[{"from":{"deviceId":"camera","portId":"hdmi-out"},"to":{"deviceId":"display","portId":"hdmi-1"}}]}
+{
+  "nodes": [
+    { "id": "display", "catalogId": "samsung-qm75b" },
+    { "id": "camera", "catalogId": "yealink-uvc86" }
+  ],
+  "connections": [
+    {
+      "from": { "deviceId": "camera", "portId": "hdmi-out" },
+      "to": { "deviceId": "display", "portId": "hdmi-1" }
+    }
+  ]
+}
 ```
 
 Optional node `position` and `rotation` use XYZ objects in metres and radians and preserve explicit engineer transforms. Arbitrary schematic drawing/PDF formats are not parsed. This path uses the active DeviceStore; no AppState synchronization layer or second persistent model exists. Rack-unit metadata and straight-line cable estimates remain available; rack allocation and installation cable routing have not been added.
 
 The procedural room includes a downward-facing ceiling (open from above), dimension-driven ceiling lights, floor seams, furniture groups and demand-rendered shadows. No static room model is loaded. There is no full collision solver or guarantee that equipment footprints cannot overlap.
-
 
 ## Procedural room and verification — September 2026
 
@@ -125,7 +134,6 @@ Automatic wall placement searches free horizontal anchors around displays; table
 
 Validation: 121/121 active workspace Vitest cases passed and production build succeeded. Coverage instrumentation was not run. The existing large bundle warning remains; 60 FPS was not benchmarked. Browser verification included microphone addition, pickup radius/angle edits, yaw, drag (9 to 5 covered seats), adding another microphone (room coverage restored to 9/9), and overlay orbit alignment. Speaker verification covered missing reference data, H/V input, reference SPL/distance, drag (8/9 to 6/9), yaw (0/9), pitch (1/9), wider dispersion (9/9), and length change 7 to 9 m (11 seats). The SPL field and seat values updated, and no browser console errors were reported.
 
-
 ## Custom tables
 
 Room parameters now include optional table width, length, height, oak/walnut/white finish and rounded/square edges. These parameters generate our own Three.js furniture, with no Google geometry involved. The same immutable room state drives furniture, seating, automatic table anchors and analysis. Dimensions are clamped to the available room clearance; the UI shows effective dimensions. Custom training desks determine bay spacing and seats per desk. Manual equipment remains unchanged. Disabling customization restores automatic table dimensions.
@@ -134,7 +142,6 @@ Validation: 126/126 active workspace tests passed; production build passed (exis
 
 Google Photorealistic 3D Tiles integration is not implemented in this milestone. Site location and an enabled Map Tiles API project are still required. Google tiles would be exterior visualization context with required attribution; editable architectural geometry must remain independently authored, not extracted or traced from those tiles. See https://developers.google.com/maps/documentation/tile/policies .
 
-
 ## Direct furniture editing
 
 `Edit furniture` enables raycast selection and dragging of generated tables and chairs. The inspector edits each table's dimensions and each chair's orientation. Dragging uses a 0.25 m grid (Shift: 0.05 m); Escape, pointer cancellation and window blur roll back the current gesture. Room changes during a gesture invalidate its rollback.
@@ -142,7 +149,6 @@ Google Photorealistic 3D Tiles integration is not implemented in this milestone.
 Authored furniture overrides live in `DeviceStore.room.furniture`. `roomLayout` applies the same coordinates to Three.js furniture, listening/viewing seats and automatic tabletop equipment. Unedited seats follow their nearest generated table; explicitly positioned chairs and manually placed equipment remain independent. Resizing a table scales its generated seating offsets. Room bounds clamp the effective furniture footprint without discarding authored coordinates. Changing room type, layout or capacity clears overrides because the generated object identities change; presets also reset them. Per-object and full-layout reset controls are provided.
 
 Furniture-only changes reuse meshes and geometry, retain the camera, and schedule demand-rendered frames. They do not rebuild architectural surfaces or textures. Table meshes scale from their generated dimensions. Overlap prevention, arbitrary table rotation, wall topology editing and installation clearance certification are not implemented. Furniture is not an equipment BOM item. Session data remains in memory.
-
 
 ## Scenario stress tests and layered analysis
 
@@ -160,5 +166,14 @@ Catalog import accepts the original array or `{schemaVersion:2, units:{dimension
 
 `physical.weightKg` from the actual uploaded files now propagates to device metadata and BOM aggregation. Missing weight/power/heat remain unknown; supplied estimates remain labeled estimates. Custom product entry exposes these fields and revision. No unspecified manufacturer specification is filled with fabricated exact values. Physical port definitions continue to populate live schematic nodes immediately when equipment is added.
 
-
 Validation for scenario/catalog/layer milestone: 153/153 active workspace tests passed; strict TypeScript and production build passed (existing main-bundle size warning remains). Production-preview browser checks exercised the worker, changing RT60/noise/link settings, independent SPL and viewing layers, a camera with supplied HFOV/VFOV, a real catalog MXA710W-to-P300 Ethernet connection with an explicit 8-channel Dante declaration (12 Mb/s), live Monte Carlo budget updates and known/unknown BOM weights. No browser console errors were observed. Coverage instrumentation and frame-rate benchmarking were not performed.
+
+## User-authored speaker pressure maps
+
+Select **Floor analysis layer → Speaker pressure map**. Enter sensitivity (dB SPL at 1 W / 1 m), total drive watts, horizontal/vertical -6 dB angles, optional phase/delay, and optional ascending frequency-response rows. Custom catalog products also accept sensitivity, drive power and response rows; portable catalog export preserves those inputs. Placed-speaker overrides remain separate from catalog definitions.
+
+PressureModel computes 1/12-octave bands in a cancellable Web Worker. Pink noise uses equal energy per logarithmic bandwidth; speech uses a generic 1 kHz-centred shaping curve, not an IEC test signal. Band weights sum to total drive power. Response rows interpolate in log frequency without extrapolation. Missing inputs remain unknown. Without rows, constant sensitivity/dispersion is an explicit assumption. Parametric angular attenuation is 6 times the larger squared normalized horizontal/vertical angle, capped at 60 dB. Distance spreading clamps below 1 m.
+
+Noise sums incoherent energies. Sine sums complex pressures with authored phase, delay, and path delay at 343 m/s. Optional first-order image sources model six rectangular boundaries with one uniform absorption coefficient. Table slabs and rotated rack bounding boxes cast geometric shadows. Surfaces include a configurable/raked audience plane or floor and tabletops. GPU textures store computed dB samples and validity masks; bilinear display shading does not increase calculation resolution. Fine sine interference may be undersampled and produces a warning.
+
+This is an estimated planning model, not measured polar data, certified STI, or a full wave solver. No diffraction, late reverberation, air absorption, room modes, crowd scattering, measured reflection phase or nonlinear compression is modeled. A closed acoustic shell is assumed even though the rendered room is cut away. Room/device/settings edits cancel stale calculations; meshes and textures are reused and disposed on teardown.

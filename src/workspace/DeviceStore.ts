@@ -1,4 +1,11 @@
 import {
+  DEFAULT_PRESSURE,
+  validatePressure,
+  validateBands,
+  type PressureSettings,
+  type AcousticBand,
+} from "./PressureModel";
+import {
   DEFAULT_SCENARIO,
   validateScenario,
   validateTraffic,
@@ -43,6 +50,9 @@ export interface DevicePort {
   readonly notes?: string;
 }
 export interface DeviceMetadata {
+  readonly acousticBands?: readonly AcousticBand[];
+  readonly acousticPhaseDeg?: number;
+  readonly acousticDelayMs?: number;
   readonly weightKg?: number | null;
   readonly micPattern?: string;
   readonly micModel?: "omni" | "cone" | "horizontal_sector" | "radius_only";
@@ -143,6 +153,8 @@ export interface EngineeringSettings {
   readonly heatBudget: number;
 }
 export interface DeviceState {
+  readonly pressure: Readonly<PressureSettings>;
+  setPressure(update: Partial<PressureSettings>): void;
   readonly scenario: Readonly<ScenarioConfig>;
   setScenario(update: Partial<ScenarioConfig>): void;
   setConnectionTraffic(id: string, traffic: DanteTraffic | undefined): void;
@@ -174,6 +186,20 @@ function finitePosition(position: XYZ): void {
     throw new Error("Coordinates must be finite");
 }
 function freezeDevice(input: PlacedDevice): PlacedDevice {
+  if (input.metadata.acousticBands) validateBands(input.metadata.acousticBands);
+  if (
+    input.metadata.acousticPhaseDeg !== undefined &&
+    (!Number.isFinite(input.metadata.acousticPhaseDeg) ||
+      Math.abs(input.metadata.acousticPhaseDeg) > 360)
+  )
+    throw new Error("Phase must be -360–360 degrees");
+  if (
+    input.metadata.acousticDelayMs !== undefined &&
+    (!Number.isFinite(input.metadata.acousticDelayMs) ||
+      input.metadata.acousticDelayMs < 0 ||
+      input.metadata.acousticDelayMs > 1000)
+  )
+    throw new Error("Delay must be 0–1000 ms");
   finitePosition(input.position);
   finitePosition(input.rotation);
   if (
@@ -290,7 +316,16 @@ function freezeDevice(input: PlacedDevice): PlacedDevice {
         }),
       ),
     ),
-    metadata: Object.freeze({ ...input.metadata }),
+    metadata: Object.freeze({
+      ...input.metadata,
+      ...(input.metadata.acousticBands
+        ? {
+            acousticBands: Object.freeze(
+              input.metadata.acousticBands.map((b) => Object.freeze({ ...b })),
+            ),
+          }
+        : {}),
+    }),
     ...(input.dimensions
       ? { dimensions: Object.freeze({ ...input.dimensions }) }
       : {}),
@@ -462,6 +497,12 @@ export function createDeviceStore(): StoreApi<DeviceState> {
         ]),
       );
       set({ room, roomPreset: id, devices: solvePlacements(devices, room) });
+    },
+    pressure: DEFAULT_PRESSURE,
+    setPressure(update) {
+      const pressure = { ...get().pressure, ...update };
+      validatePressure(pressure);
+      set({ pressure: Object.freeze(pressure) });
     },
     scenario: DEFAULT_SCENARIO,
     setScenario(update) {

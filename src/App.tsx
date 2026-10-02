@@ -1,3 +1,5 @@
+import { PressureMapPanel } from "./components/PressureMapPanel";
+import type { PressureResult } from "./workspace/PressureModel";
 import { ScenarioPanel } from "./components/ScenarioPanel";
 import { viewingField } from "./workspace/ViewingField";
 import { FurnitureInspector } from "./components/FurnitureInspector";
@@ -27,7 +29,7 @@ import "./workspace.css";
 export default function App() {
   const [store] = useState(createWorkspace);
   const [floorLayer, setFloorLayer] = useState<
-    "auto" | "off" | "spl" | "viewing" | "microphone"
+    "auto" | "off" | "spl" | "viewing" | "microphone" | "pressure"
   >("auto");
   const [cameraLayer, setCameraLayer] = useState(false);
   const [furnitureEditing, setFurnitureEditing] = useState(false);
@@ -73,6 +75,66 @@ export default function App() {
         ids[kind] === d.id ? ids : { ...ids, [kind]: d.id },
       );
   }, [selectedId, devices]);
+  const pressureSettings = useStore(store.api, (s) => s.pressure);
+  const [pressureData, setPressureData] = useState<{
+    result: PressureResult;
+    devices: typeof devices;
+    room: typeof room;
+    settings: typeof pressureSettings;
+  } | null>(null);
+  const [pressureError, setPressureError] = useState("");
+  const pressureResult =
+    pressureData?.devices === devices &&
+    pressureData.room === room &&
+    pressureData.settings === pressureSettings
+      ? pressureData.result
+      : null;
+  useEffect(() => {
+    setPressureError("");
+    if (floorLayer !== "pressure") return;
+    let worker: Worker | undefined,
+      cancelled = false;
+    const timer = setTimeout(() => {
+      try {
+        worker = new Worker(
+          new URL("./workspace/pressure.worker.ts", import.meta.url),
+          { type: "module" },
+        );
+        worker.onmessage = (
+          e: MessageEvent<{ result?: PressureResult; error?: string }>,
+        ) => {
+          if (cancelled) return;
+          if (e.data.result)
+            setPressureData({
+              result: e.data.result,
+              devices,
+              room,
+              settings: pressureSettings,
+            });
+          setPressureError(e.data.error ?? "");
+          worker?.terminate();
+        };
+        worker.onerror = () => {
+          if (!cancelled)
+            setPressureError(
+              "Pressure calculation failed; adjust inputs to retry.",
+            );
+          worker?.terminate();
+        };
+        worker.postMessage({
+          state: { devices, room },
+          settings: pressureSettings,
+        });
+      } catch (e) {
+        setPressureError(e instanceof Error ? e.message : String(e));
+      }
+    }, 120);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      worker?.terminate();
+    };
+  }, [floorLayer, devices, room, pressureSettings]);
   const [selectedSeat, setSelectedSeat] = useState<string | null>(null);
   const optical = useMemo(() => {
     if (mode !== "camera" && mode !== "display") return undefined;
@@ -203,6 +265,10 @@ export default function App() {
         })),
       );
     else manager?.setHeatmap("off");
+    manager?.setPressureMap(
+      floorLayer === "pressure" ? pressureResult : null,
+      pressureSettings,
+    );
     manager?.setCameraLayers(cameraLayer, store.api.getState());
     manager?.setVisualOverlay(floorLayer === "viewing", audit.visual);
     manager?.setVisualCones(false, devices, settings);
@@ -216,6 +282,8 @@ export default function App() {
       audio,
     );
   }, [
+    pressureResult,
+    pressureSettings,
     floorLayer,
     cameraLayer,
     roomMic,
@@ -320,7 +388,8 @@ export default function App() {
                 >
                   <option value="auto">Follow workspace mode</option>
                   <option value="off">Off</option>
-                  <option value="spl">Acoustic SPL</option>
+                  <option value="spl">Acoustic SPL (quick estimate)</option>
+                  <option value="pressure">Speaker pressure map</option>
                   <option value="microphone">Microphone coverage</option>
                   <option value="viewing">Viewing / DISCAS planning</option>
                 </select>
@@ -334,6 +403,22 @@ export default function App() {
                 Camera FOV layer
               </label>
             </div>
+            {floorLayer === "pressure" && (
+              <div
+                className="flex items-center gap-3 px-4 py-1 text-xs text-slate-300"
+                role="status"
+              >
+                <span>Estimated SPL {pressureSettings.minimumDb} dB</span>
+                <span
+                  className="h-2 w-32 rounded"
+                  style={{
+                    background:
+                      "linear-gradient(to right,#141f99,#00cce6,#2ed94d,#ffd90d,#f2141f)",
+                  }}
+                />
+                <span>{pressureSettings.maximumDb} dB · Grey: unknown</span>
+              </div>
+            )}
             {cameraLayer && (
               <div className="px-4 py-1 text-xs text-slate-300">
                 Camera volumes use declared horizontal and vertical FOV. Missing
@@ -341,15 +426,17 @@ export default function App() {
                 occlusion is not modeled.
               </div>
             )}
-            {floorLayer !== "auto" && floorLayer !== "off" && (
-              <div className="px-4 py-1 text-xs text-slate-300" role="status">
-                {floorLayer === "spl"
-                  ? "SPL estimate: blue 40 → green 65 → red 90 dB; grey = unknown. Free field; listener-height samples projected to floor."
-                  : "Green: within planning limits · Amber: edge · Red: outside · Grey: unknown. Listener-height samples projected to floor."}
-                {floorLayer === "viewing" &&
-                  " Public BDM + 4/6/8 and project off-axis limits; full DISCAS compliance unverified."}
-              </div>
-            )}
+            {floorLayer !== "auto" &&
+              floorLayer !== "off" &&
+              floorLayer !== "pressure" && (
+                <div className="px-4 py-1 text-xs text-slate-300" role="status">
+                  {floorLayer === "spl"
+                    ? "SPL estimate: blue 40 → green 65 → red 90 dB; grey = unknown. Free field; listener-height samples projected to floor."
+                    : "Green: within planning limits · Amber: edge · Red: outside · Grey: unknown. Listener-height samples projected to floor."}
+                  {floorLayer === "viewing" &&
+                    " Public BDM + 4/6/8 and project off-axis limits; full DISCAS compliance unverified."}
+                </div>
+              )}
             <div className="analysis-toolbar">
               <button
                 aria-pressed={furnitureEditing}
@@ -519,6 +606,13 @@ export default function App() {
           )}
           <p className="eyebrow">LIVE ENGINEERING</p>
           <h2>Design health</h2>
+          {floorLayer === "pressure" && (
+            <PressureMapPanel
+              store={store}
+              result={pressureResult}
+              error={pressureError}
+            />
+          )}
           <ScenarioPanel store={store} />
           {(mode === "camera" || mode === "display") && (
             <OpticalAnalysisPanel
