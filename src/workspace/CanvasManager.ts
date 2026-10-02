@@ -1,3 +1,8 @@
+import {
+  environmentGroup,
+  disposeEnvironment,
+  type ImportedEnvironment,
+} from "./EnvironmentImport";
 import { PressureOverlay } from "./PressureOverlay";
 import type { PressureResult, PressureSettings } from "./PressureModel";
 import { cameraCoverage } from "./OpticalEngineering";
@@ -33,6 +38,18 @@ export interface CanvasManagerOptions {
 
 /** Owns GPU resources and DOM listeners. No perpetual animation loop. */
 export class CanvasManager {
+  private environment: ImportedEnvironment | null = null;
+  private environmentMesh: THREE.Group | undefined;
+  setEnvironment(value: ImportedEnvironment | null) {
+    if (this.environment === value) return;
+    this.environment = value;
+    if (this.environmentMesh) disposeEnvironment(this.environmentMesh);
+    this.environmentMesh = value
+      ? environmentGroup(value, () => this.invalidate())
+      : undefined;
+    if (this.environmentMesh) this.scene.add(this.environmentMesh);
+    this.invalidate();
+  }
   readonly scene = new THREE.Scene();
   private readonly overviewCamera = new THREE.OrthographicCamera(
     -1,
@@ -792,6 +809,7 @@ export class CanvasManager {
     this.renderer.domElement.removeEventListener("pointerdown", this.select);
     this.observer.disconnect();
     this.navigation?.dispose();
+    if (this.environmentMesh) disposeEnvironment(this.environmentMesh);
     this.pressureOverlay?.dispose();
     this.overlays?.dispose();
     this.cameraLayers.forEach((layer) => layer.dispose());
