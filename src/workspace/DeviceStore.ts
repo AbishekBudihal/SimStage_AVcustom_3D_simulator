@@ -1,4 +1,8 @@
 import {
+  freezeEnvironment,
+  type ImportedEnvironment,
+} from "./EnvironmentImport";
+import {
   DEFAULT_PRESSURE,
   validatePressure,
   validateBands,
@@ -153,6 +157,8 @@ export interface EngineeringSettings {
   readonly heatBudget: number;
 }
 export interface DeviceState {
+  readonly environment: ImportedEnvironment | null;
+  setEnvironment(value: ImportedEnvironment | null): void;
   readonly pressure: Readonly<PressureSettings>;
   setPressure(update: Partial<PressureSettings>): void;
   readonly scenario: Readonly<ScenarioConfig>;
@@ -497,6 +503,10 @@ export function createDeviceStore(): StoreApi<DeviceState> {
         ]),
       );
       set({ room, roomPreset: id, devices: solvePlacements(devices, room) });
+    },
+    environment: null,
+    setEnvironment(value) {
+      set({ environment: value ? freezeEnvironment(value) : null });
     },
     pressure: DEFAULT_PRESSURE,
     setPressure(update) {

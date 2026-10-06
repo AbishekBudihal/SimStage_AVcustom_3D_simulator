@@ -769,3 +769,99 @@ h3 {
   background: #245a97;
   border-color: #94d7ff;
 }
+
+.environment-dialog {
+  width: min(1100px, 95vw);
+  max-height: 92vh;
+  overflow: auto;
+  background: #111827;
+  color: #e2e8f0;
+  border: 1px solid #475569;
+  border-radius: 14px;
+  padding: 24px;
+}
+.environment-dialog::backdrop {
+  background: #000a;
+}
+.environment-dialog header,
+.environment-dialog footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.environment-dialog button {
+  background: #243b53;
+  border: 1px solid #52677f;
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.environment-dialog button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.environment-dialog button[aria-pressed="true"] {
+  background: #1d4ed8;
+}
+.environment-dialog p {
+  font-size: 13px;
+  color: #cbd5e1;
+  margin: 10px 0;
+}
+.environment-dialog label {
+  display: block;
+  font-size: 13px;
+  margin: 10px 0;
+}
+.environment-dialog input,
+.environment-dialog select {
+  background: #1e293b;
+  color: #fff;
+  border: 1px solid #64748b;
+  border-radius: 4px;
+  padding: 5px;
+  max-width: 100%;
+}
+.environment-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 230px;
+  gap: 18px;
+}
+.environment-preview {
+  width: 100%;
+  height: 440px;
+  background: #f1f5f9;
+  border: 1px solid #64748b;
+  cursor: crosshair;
+  touch-action: none;
+}
+.environment-outlines {
+  max-height: 240px;
+  overflow: auto;
+}
+.environment-outlines > div {
+  border-top: 1px solid #475569;
+  padding: 8px 0;
+}
+@media (max-width: 750px) {
+  .environment-grid {
+    grid-template-columns: 1fr;
+  }
+  .environment-preview {
+    height: 300px;
+  }
+}
+
+.environment-entry > button {
+  display: block;
+  width: 100%;
+  margin: 8px 0;
+  background: #1e3a5f;
+  color: #e2e8f0;
+  border: 1px solid #456386;
+  border-radius: 6px;
+  padding: 8px;
+  cursor: pointer;
+}

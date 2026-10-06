@@ -1,3 +1,4 @@
+import { EnvironmentImporter } from "./components/EnvironmentImporter";
 import { PressureMapPanel } from "./components/PressureMapPanel";
 import type { PressureResult } from "./workspace/PressureModel";
 import { ScenarioPanel } from "./components/ScenarioPanel";
@@ -36,6 +37,7 @@ export default function App() {
   const [selectedFurniture, setSelectedFurniture] = useState<string | null>(
     null,
   );
+  const environment = useStore(store.api, (s) => s.environment);
   const selectedId = useStore(store.api, (s) => s.selectedId);
   const devices = useStore(store.api, (s) => s.devices),
     connections = useStore(store.api, (s) => s.connections),
@@ -81,12 +83,14 @@ export default function App() {
     devices: typeof devices;
     room: typeof room;
     settings: typeof pressureSettings;
+    environment: typeof environment;
   } | null>(null);
   const [pressureError, setPressureError] = useState("");
   const pressureResult =
     pressureData?.devices === devices &&
     pressureData.room === room &&
-    pressureData.settings === pressureSettings
+    pressureData.settings === pressureSettings &&
+    pressureData.environment === environment
       ? pressureData.result
       : null;
   useEffect(() => {
@@ -107,6 +111,7 @@ export default function App() {
           if (e.data.result)
             setPressureData({
               result: e.data.result,
+              environment,
               devices,
               room,
               settings: pressureSettings,
@@ -122,7 +127,13 @@ export default function App() {
           worker?.terminate();
         };
         worker.postMessage({
-          state: { devices, room },
+          state: {
+            devices,
+            room,
+            environment: environment
+              ? { ...environment, image: undefined }
+              : null,
+          },
           settings: pressureSettings,
         });
       } catch (e) {
@@ -134,7 +145,7 @@ export default function App() {
       clearTimeout(timer);
       worker?.terminate();
     };
-  }, [floorLayer, devices, room, pressureSettings]);
+  }, [floorLayer, devices, room, pressureSettings, environment]);
   const [selectedSeat, setSelectedSeat] = useState<string | null>(null);
   const optical = useMemo(() => {
     if (mode !== "camera" && mode !== "display") return undefined;
@@ -206,6 +217,7 @@ export default function App() {
     const sync = () => {
       const state = store.api.getState();
       manager.setRoom(state.room);
+      manager.setEnvironment(state.environment);
       manager.syncDevices(state.devices, state.selectedId);
     };
     const unsubscribe = store.api.subscribe(sync),
@@ -336,8 +348,9 @@ export default function App() {
         <aside className="panel inventory-panel" aria-label="Quick inventory">
           <p className="eyebrow">SYSTEM BUILDER</p>
           <RoomController store={store} />
+          <EnvironmentImporter store={store} />
           <p className="muted">
-            {audit.seats} seats · {room.width * room.depth} m²
+            {audit.seats} seats · {(room.width * room.depth).toFixed(1)} m²
           </p>
           <CatalogLibrary store={store} ready={ready && !error} spawn={spawn} />
         </aside>
@@ -365,7 +378,9 @@ export default function App() {
             <div className="canvas-toolbar">
               <div>
                 <strong>Parametric room / {audit.seats} seats</strong>
-                <span>Cutaway view · {room.width * room.depth} m²</span>
+                <span>
+                  Cutaway view · {(room.width * room.depth).toFixed(1)} m²
+                </span>
               </div>
               <ViewportHUD
                 view={view}

@@ -1,3 +1,4 @@
+import { environmentBlocker } from "./EnvironmentImport";
 import type { DeviceState, PlacedDevice, XYZ } from "./DeviceStore";
 import { roomLayout } from "./RoomLayout";
 import { audioOrientation } from "./AudioEngineering";
@@ -172,7 +173,8 @@ export function segmentBlocked(
     return far > 1e-5 && near < 1 - 1e-5 && far - near > 1e-6;
   });
 }
-export type PressureInput = Pick<DeviceState, "devices" | "room">;
+export type PressureInput = Pick<DeviceState, "devices" | "room"> &
+  Partial<Pick<DeviceState, "environment">>;
 export interface SoundPath {
   distance: number;
   direction: XYZ;
@@ -184,6 +186,7 @@ export function soundPaths(
   room: DeviceState["room"],
   boxes: readonly AcousticBox[],
   reflections: boolean,
+  importedBlocked: (a: XYZ, b: XYZ) => boolean = () => false,
 ): SoundPath[] {
   const paths: SoundPath[] = [];
   const length = (a: XYZ, b: XYZ) =>
@@ -193,7 +196,10 @@ export function soundPaths(
     y: p.y - source.y,
     z: p.z - source.z,
   });
-  if (!segmentBlocked(source, receiver, boxes))
+  if (
+    !segmentBlocked(source, receiver, boxes) &&
+    !importedBlocked(source, receiver)
+  )
     paths.push({
       distance: length(source, receiver),
       direction: direction(receiver),
@@ -226,7 +232,9 @@ export function soundPaths(
         continue;
       if (
         segmentBlocked(source, bounce, boxes) ||
-        segmentBlocked(bounce, receiver, boxes)
+        segmentBlocked(bounce, receiver, boxes) ||
+        importedBlocked(source, bounce) ||
+        importedBlocked(bounce, receiver)
       )
         continue;
       paths.push({
@@ -308,12 +316,19 @@ export function pressureMap(
     s.audienceHeight + s.audienceRise >= state.room.height
   )
     throw new Error("Audience plane must remain below the ceiling");
+  const importedBlocked = environmentBlocker(
+    s.obstruction ? state.environment : null,
+  );
   const bands = signalBands(s),
     boxes = s.obstruction ? obstacles(state) : [];
   const all = Object.values(state.devices).filter(
     (d): d is PlacedDevice => !!d && d.kind === "speaker",
   );
   const warnings: string[] = [];
+  if (state.environment)
+    warnings.push(
+      "Imported meshes cast geometric shadows. Reflections still use the rectangular room; imported audience blocks do not create listener seats. Optical and quick coverage layers do not test imported obstructions.",
+    );
   const sources = all
     .filter((d) => d.metadata.speakerWatts !== 0)
     .map((d) => {
@@ -421,6 +436,7 @@ export function pressureMap(
             state.room,
             boxes,
             s.reflections,
+            importedBlocked,
           ),
         );
         if (sources.length && paths.every((p) => p.length === 0)) blocked++;
