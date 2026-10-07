@@ -1,0 +1,156 @@
+{
+  "format": "simstage-blueprint",
+  "version": 1,
+  "environment": {
+    "name": "Sample boardroom",
+    "width": 1000,
+    "height": 700,
+    "metersPerUnit": 0.01,
+    "outlines": [
+      {
+        "id": "wall-0",
+        "kind": "wall",
+        "segment": {
+          "start": {
+            "x": 100,
+            "y": 100
+          },
+          "end": {
+            "x": 900,
+            "y": 100
+          },
+          "thickness": 0.2,
+          "openings": []
+        },
+        "points": [
+          {
+            "x": 100.0,
+            "y": 110.0
+          },
+          {
+            "x": 900.0,
+            "y": 110.0
+          },
+          {
+            "x": 900.0,
+            "y": 90.0
+          },
+          {
+            "x": 100.0,
+            "y": 90.0
+          }
+        ],
+        "height": 3,
+        "elevation": 0
+      },
+      {
+        "id": "wall-1",
+        "kind": "wall",
+        "segment": {
+          "start": {
+            "x": 900,
+            "y": 100
+          },
+          "end": {
+            "x": 900,
+            "y": 600
+          },
+          "thickness": 0.2,
+          "openings": []
+        },
+        "points": [
+          {
+            "x": 890.0,
+            "y": 100.0
+          },
+          {
+            "x": 890.0,
+            "y": 600.0
+          },
+          {
+            "x": 910.0,
+            "y": 600.0
+          },
+          {
+            "x": 910.0,
+            "y": 100.0
+          }
+        ],
+        "height": 3,
+        "elevation": 0
+      },
+      {
+        "id": "wall-2",
+        "kind": "wall",
+        "segment": {
+          "start": {
+            "x": 900,
+            "y": 600
+          },
+          "end": {
+            "x": 100,
+            "y": 600
+          },
+          "thickness": 0.2,
+          "openings": []
+        },
+        "points": [
+          {
+            "x": 900.0,
+            "y": 590.0
+          },
+          {
+            "x": 100.0,
+            "y": 590.0
+          },
+          {
+            "x": 100.0,
+            "y": 610.0
+          },
+          {
+            "x": 900.0,
+            "y": 610.0
+          }
+        ],
+        "height": 3,
+        "elevation": 0
+      },
+      {
+        "id": "wall-3",
+        "kind": "wall",
+        "segment": {
+          "start": {
+            "x": 100,
+            "y": 600
+          },
+          "end": {
+            "x": 100,
+            "y": 100
+          },
+          "thickness": 0.2,
+          "openings": []
+        },
+        "points": [
+          {
+            "x": 110.0,
+            "y": 600.0
+          },
+          {
+            "x": 110.0,
+            "y": 100.0
+          },
+          {
+            "x": 90.0,
+            "y": 100.0
+          },
+          {
+            "x": 90.0,
+            "y": 600.0
+          }
+        ],
+        "height": 3,
+        "elevation": 0
+      }
+    ]
+  }
+}

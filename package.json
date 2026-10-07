@@ -15,6 +15,7 @@
     "url": "git+https://github.com/AbishekBudihal/SimStage_AVcustom_3D_simulator.git"
   },
   "dependencies": {
+    "pdfjs-dist": "6.4.299",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "three": "^0.164.1",
