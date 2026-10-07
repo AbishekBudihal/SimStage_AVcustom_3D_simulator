@@ -1,3 +1,10 @@
+import {
+  roomSurfaces,
+  wallFootprint,
+  wallPanels,
+  validateOpenings,
+  type WallSegment,
+} from "./BlueprintTopology";
 import * as T from "three";
 export interface PlanPoint {
   x: number;
@@ -5,7 +12,9 @@ export interface PlanPoint {
 }
 export interface PlanOutline {
   id: string;
-  kind: "wall" | "ceiling" | "audience";
+  kind: "wall" | "ceiling" | "audience" | "floor";
+  segment?: WallSegment;
+  material?: "plaster" | "concrete" | "wood";
   points: PlanPoint[];
   elevation: number;
   height: number;
@@ -16,6 +25,7 @@ export interface ImportedEnvironment {
   width: number;
   height: number;
   metersPerUnit: number;
+  zoneCeilingHeight?: number;
   outlines: PlanOutline[];
 }
 export function calibration(a: PlanPoint, b: PlanPoint, meters: number) {
@@ -32,7 +42,7 @@ export function validateOutline(p: PlanOutline) {
   )
     throw Error("An outline needs 3–2000 finite vertices.");
   if (
-    !["wall", "ceiling", "audience"].includes(p.kind) ||
+    !["wall", "ceiling", "audience", "floor"].includes(p.kind) ||
     !Number.isFinite(p.elevation) ||
     p.elevation < 0 ||
     !Number.isFinite(p.height) ||
@@ -84,8 +94,32 @@ export function freezeEnvironment(
   if (value.outlines.reduce((sum, o) => sum + o.points.length, 0) > 10000)
     throw Error("Maximum 10,000 outline vertices per plan.");
   const copy = structuredClone(value);
+  if (copy.zoneCeilingHeight !== undefined) {
+    copy.outlines = copy.outlines.filter(
+      (o) =>
+        !o.id.startsWith("zone-floor-") && !o.id.startsWith("zone-ceiling-"),
+    );
+    copy.outlines.push(...roomSurfaces(copy, copy.zoneCeilingHeight));
+    if (copy.outlines.length > 200)
+      throw Error("Generated surfaces exceed 200 outlines.");
+  }
+  if (copy.outlines.reduce((n, o) => n + o.points.length, 0) > 10000)
+    throw Error("Generated geometry exceeds 10,000 vertices.");
   const ids = new Set<string>();
   for (const p of copy.outlines) {
+    if (p.material && !["plaster", "concrete", "wood"].includes(p.material))
+      throw Error("Unknown material.");
+    if (p.segment) {
+      if (p.kind !== "wall")
+        throw Error("Only walls can have centerline metadata.");
+      p.points = wallFootprint(p.segment, copy.metersPerUnit);
+      validateOpenings(p, copy.metersPerUnit);
+      Object.freeze(p.segment.start);
+      Object.freeze(p.segment.end);
+      p.segment.openings.forEach(Object.freeze);
+      Object.freeze(p.segment.openings);
+      Object.freeze(p.segment);
+    }
     validateOutline(p);
     if (ids.has(p.id)) throw Error("Duplicate outline ID.");
     ids.add(p.id);
@@ -207,6 +241,47 @@ export function environmentGroup(
   const group = new T.Group();
   group.name = "Imported environment";
   for (const outline of plan.outlines) {
+    const color =
+      outline.material === "wood"
+        ? 0xa87943
+        : outline.material === "concrete"
+          ? 0x8f969c
+          : outline.kind === "audience"
+            ? 0x458ca8
+            : 0xcbd5e1;
+    if (outline.segment) {
+      const seg = outline.segment,
+        dx = seg.end.x - seg.start.x,
+        dy = seg.end.y - seg.start.y,
+        angle = -Math.atan2(dy, dx);
+      for (const panel of wallPanels(outline, plan.metersPerUnit)) {
+        const geometry = new T.BoxGeometry(
+          panel.width,
+          panel.height,
+          seg.thickness,
+        );
+        geometry.translate(
+          panel.offset + panel.width / 2,
+          outline.elevation + panel.bottom + panel.height / 2,
+          0,
+        );
+        geometry.rotateY(angle);
+        geometry.translate(
+          (seg.start.x - plan.width / 2) * plan.metersPerUnit,
+          0,
+          (seg.start.y - plan.height / 2) * plan.metersPerUnit,
+        );
+        const mesh = new T.Mesh(
+          geometry,
+          new T.MeshStandardMaterial({ color, roughness: 0.85 }),
+        );
+        mesh.name = outline.id;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+      }
+      continue;
+    }
     const shape = new T.Shape(
       outline.points.map(
         (p) =>
@@ -224,12 +299,7 @@ export function environmentGroup(
     geometry.rotateX(-Math.PI / 2);
     geometry.translate(0, outline.elevation, 0);
     const material = new T.MeshStandardMaterial({
-      color:
-        outline.kind === "wall"
-          ? 0xb8c2cc
-          : outline.kind === "ceiling"
-            ? 0xe2e8f0
-            : 0x458ca8,
+      color,
       transparent: outline.kind === "ceiling",
       opacity: outline.kind === "ceiling" ? 0.25 : 1,
       side: T.DoubleSide,

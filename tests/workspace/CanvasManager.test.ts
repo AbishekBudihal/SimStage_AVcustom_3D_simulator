@@ -1,3 +1,10 @@
+import {
+  parseBlueprint,
+  serializeBlueprint,
+} from "../../src/workspace/BlueprintIO";
+import blueprintFixture from "../fixtures/blueprint-room.json";
+import { summarizeBom } from "../../src/workspace/BomSummary";
+import { environmentBlocker } from "../../src/workspace/EnvironmentImport";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
 import { CanvasManager } from "../../src/workspace/CanvasManager";
@@ -349,4 +356,43 @@ describe("CanvasManager", () => {
     expect(frames.size).toBe(0);
     expect(manager.pickTargets).toHaveLength(0);
   });
+});
+
+it("integrates saved architecture with the live store, scene and unchanged AV graph", () => {
+  const store = createWorkspace(),
+    before = store.api.getState(),
+    bom = summarizeBom(before.devices);
+  const sync = () => {
+    const state = store.api.getState();
+    manager.setRoom(state.room);
+    manager.syncDevices(state.devices, state.selectedId);
+    manager.setEnvironment(state.environment);
+  };
+  const unsubscribe = store.api.subscribe(sync);
+  sync();
+  const plan = parseBlueprint(JSON.stringify(blueprintFixture));
+  store.api.getState().setEnvironment(plan);
+  const first = manager.scene.getObjectByName("Imported environment")!;
+  expect(first.children).toHaveLength(4);
+  const oldMesh = first.children[0] as THREE.Mesh,
+    dispose = vi.spyOn(oldMesh.geometry, "dispose");
+  const state = store.api.getState();
+  expect(state.connections).toBe(before.connections);
+  expect(state.devices).toBe(before.devices);
+  expect(summarizeBom(state.devices)).toEqual(bom);
+  const edited = parseBlueprint(serializeBlueprint(state.environment!));
+  const next = structuredClone(edited);
+  next.outlines[0].height = 4;
+  store.api.getState().setEnvironment(next);
+  expect(dispose).toHaveBeenCalledOnce();
+  const updated = manager.scene.getObjectByName("Imported environment")!
+    .children[0] as THREE.Mesh;
+  updated.geometry.computeBoundingBox();
+  expect(updated.geometry.boundingBox!.max.y).toBeCloseTo(4);
+  const blocked = environmentBlocker(store.api.getState().environment);
+  expect(blocked({ x: 0, y: 1, z: -4 }, { x: 0, y: 1, z: 0 })).toBe(true);
+  store.api.getState().setEnvironment(null);
+  expect(manager.scene.getObjectByName("Imported environment")).toBeUndefined();
+  expect(store.api.getState().connections).toBe(before.connections);
+  unsubscribe();
 });
