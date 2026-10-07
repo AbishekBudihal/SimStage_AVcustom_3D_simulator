@@ -1,0 +1,15 @@
+SimStage AV DWG decoder
+@mlightcad/libredwg-web 0.7.14 by MLight Lee and LibreDWG contributors.
+License: GPL-3.0 (GNU LibreDWG core: GPL-3.0-or-later).
+Full license: /licenses/LibreDWG-GPL-3.0.txt
+Exact upstream source release (v0.7.14):
+https://github.com/mlightcad/libredwg-web/tree/1dd682f46339f37b67c5ff1085d10d04a8c16d7e
+Source archive:
+https://github.com/mlightcad/libredwg-web/archive/refs/tags/v0.7.14.tar.gz
+Build instructions: bindings/javascript/README.md in that source release.
+Pinned npm package: https://www.npmjs.com/package/@mlightcad/libredwg-web/v/0.7.14
+SimStage integration source: https://github.com/AbishekBudihal/SimStage_AVcustom_3D_simulator/tree/codex/simstage-workspace-ui
+The decoder is unmodified. It runs in a worker for responsiveness, not license isolation.
+Distributed GPL-covered components and combined works must satisfy applicable GPL terms,
+including Corresponding Source. This notice is not a substitute for those obligations.
+No warranty; see the GPL text.

@@ -14,6 +14,7 @@ export interface PlanOutline {
   id: string;
   kind: "wall" | "ceiling" | "audience" | "floor";
   segment?: WallSegment;
+  layer?: string;
   material?: "plaster" | "concrete" | "wood";
   points: PlanPoint[];
   elevation: number;
@@ -50,6 +51,11 @@ export function validateOutline(p: PlanOutline) {
     p.height > 30
   )
     throw Error("Invalid surface height or type.");
+  if (
+    p.layer !== undefined &&
+    (typeof p.layer !== "string" || p.layer.length > 255)
+  )
+    throw Error("Invalid CAD layer metadata.");
   const pts = p.points,
     cross = (a: PlanPoint, b: PlanPoint, c: PlanPoint) =>
       (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);

@@ -1,3 +1,6 @@
+import { DwgImportReview } from "./DwgImportReview";
+import { decodeDwg } from "../workspace/DwgDecoder";
+import type { CadDrawing } from "../workspace/DwgImport";
 import { BlueprintPreview } from "./BlueprintPreview";
 import { BlueprintInspector } from "./BlueprintInspector";
 import { snapPlanPoint, wallFootprint } from "../workspace/BlueprintTopology";
@@ -21,6 +24,8 @@ import {
   type PlanOutline,
 } from "../workspace/EnvironmentImport";
 export function EnvironmentImporter({ store }: { store: DeviceStore }) {
+  const [cad, setCad] = useState<CadDrawing | null>(null);
+  const decodeAbort = useRef<AbortController | null>(null);
   const current = useStore(store.api, (s) => s.environment),
     [open, setOpen] = useState(false),
     [draft, setDraft] = useState<ImportedEnvironment | null>(null),
@@ -60,7 +65,7 @@ export function EnvironmentImporter({ store }: { store: DeviceStore }) {
     };
     svg.addEventListener("wheel", wheel, { passive: false });
     return () => svg.removeEventListener("wheel", wheel);
-  }, [open, !!draft]);
+  }, [open, !!draft, !!cad]);
   const dialog = useRef<HTMLDialogElement>(null),
     serial = useRef(0);
   useEffect(() => {
@@ -70,6 +75,7 @@ export function EnvironmentImporter({ store }: { store: DeviceStore }) {
   useEffect(
     () => () => {
       serial.current++;
+      decodeAbort.current?.abort();
     },
     [],
   );
@@ -82,7 +88,11 @@ export function EnvironmentImporter({ store }: { store: DeviceStore }) {
     }
   }
   async function read(file: File) {
+    decodeAbort.current?.abort();
+    const controller = new AbortController();
+    decodeAbort.current = controller;
     const ticket = ++serial.current;
+    setCad(null);
     setBusy(true);
     setError("");
     try {
@@ -92,10 +102,11 @@ export function EnvironmentImporter({ store }: { store: DeviceStore }) {
         );
       let plan: ImportedEnvironment,
         warnings: string[] = [];
-      if (/\.dwg$/i.test(file.name))
-        throw Error(
-          "Native DWG decoding is not available. Export model-space closed polylines as ASCII DXF in your CAD application, then import that DXF.",
-        );
+      if (/\.dwg$/i.test(file.name)) {
+        const drawing = await decodeDwg(file, controller.signal);
+        if (ticket === serial.current) setCad(drawing);
+        return;
+      }
       if (/\.json$/i.test(file.name)) {
         plan = parseBlueprint(await file.text());
       } else if (/\.pdf$/i.test(file.name)) {
@@ -150,6 +161,8 @@ export function EnvironmentImporter({ store }: { store: DeviceStore }) {
   }
   const close = () => {
     serial.current++;
+    decodeAbort.current?.abort();
+    setCad(null);
     setBusy(false);
     setOpen(false);
   };
@@ -200,6 +213,10 @@ export function EnvironmentImporter({ store }: { store: DeviceStore }) {
           <summary>Import source / new blueprint</summary>
           <button
             onClick={() => {
+              decodeAbort.current?.abort();
+              serial.current++;
+              setBusy(false);
+              setCad(null);
               const room = store.api.getState().room;
               setDraft({
                 name: "New blueprint",
@@ -245,11 +262,42 @@ export function EnvironmentImporter({ store }: { store: DeviceStore }) {
           </label>
           <p>
             PNG/JPG/PDF: manual tracing. ASCII DXF: closed straight LWPOLYLINE
-            footprints. DWG requires DXF export. All processing stays in this
-            browser.
+            footprints. DWG: choose layers and units, then extrude with
+            LibreDWG. All processing stays in this browser.
           </p>
         </details>
-        {busy && <p role="status">Processing…</p>}
+        {busy && (
+          <p role="status">
+            Processing drawing locally…{" "}
+            <button
+              onClick={() => {
+                serial.current++;
+                decodeAbort.current?.abort();
+                setBusy(false);
+              }}
+            >
+              Cancel import
+            </button>
+          </p>
+        )}
+        {cad && (
+          <DwgImportReview
+            drawing={cad}
+            onCancel={() => setCad(null)}
+            onBuild={(plan) => {
+              setDraft(plan);
+              setCad(null);
+              setCalibrated(true);
+              setMode("inspect");
+              setZoom(1);
+              setPan({ x: 0, y: 0 });
+              setPoints([]);
+              setSelected(null);
+              setNotes(cad.warnings);
+              setError("");
+            }}
+          />
+        )}
         {error && (
           <p role="alert" className="text-red-300">
             {error}
@@ -258,7 +306,7 @@ export function EnvironmentImporter({ store }: { store: DeviceStore }) {
         {notes.map((n) => (
           <p key={n}>{n}</p>
         ))}
-        {draft && (
+        {draft && !cad && (
           <>
             <h3>{draft.name}</h3>
             <div className="blueprint-actions">
