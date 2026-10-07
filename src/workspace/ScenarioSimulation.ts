@@ -1,3 +1,4 @@
+import { simulationBlocker } from "./SimulationGeometry";
 import type { DeviceState, PlacedDevice, Connection } from "./DeviceStore";
 import { roomLayout } from "./RoomLayout";
 import { microphonePoint } from "./AudioEngineering";
@@ -5,7 +6,7 @@ import { intelligibilityProxy } from "./Engineering";
 export type ScenarioInput = Pick<
   DeviceState,
   "room" | "devices" | "connections" | "engineering"
->;
+> & Partial<Pick<DeviceState, "environment">>;
 export interface ScenarioConfig {
   iterations: number;
   seed: number;
@@ -194,8 +195,12 @@ export function runScenarios(
   const mics = Object.values(state.devices).filter(
     (d): d is PlacedDevice => !!d && d.kind === "ceiling_mic",
   );
+  const blocked = simulationBlocker(state.environment);
   const paths = seats.map((s) =>
-    mics.map((d) => microphonePoint(d, s.position)),
+    mics.map((d) => {
+      const path = microphonePoint(d, s.position);
+      return blocked(d.position, s.position) ? { ...path, status: "outside" as const } : path;
+    }),
   );
   const audit = signalAudit(state),
     trials: Trial[] = [];

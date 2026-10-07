@@ -327,7 +327,7 @@ export function pressureMap(
   const warnings: string[] = [];
   if (state.environment)
     warnings.push(
-      "Imported meshes cast geometric shadows. Reflections still use the rectangular room; imported audience blocks do not create listener seats. Optical and quick coverage layers do not test imported obstructions.",
+      "Imported meshes cast geometric shadows. Reflections still use the rectangular room; imported audience blocks do not create listener seats. Optical and quick coverage seat checks test direct imported-geometry obstruction; cones remain idealized envelopes.",
     );
   const sources = all
     .filter((d) => d.metadata.speakerWatts !== 0)

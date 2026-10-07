@@ -1,6 +1,6 @@
-import { directSpl } from "./AudioEngineering";
+import { simulationBlocker, type PathBlocker } from "./SimulationGeometry";
+import { analyzeAudio } from "./AudioEngineering";
 export { directSpl } from "./AudioEngineering";
-import { sampleListeningPlane } from "./ListeningGrid";
 import { screenOrigin, orientation } from "./OpticalTransform";
 import * as T from "three";
 import type {
@@ -18,8 +18,12 @@ export function visualCheck(
   display: PlacedDevice,
   seat: XYZ,
   settings: EngineeringSettings,
+  blocked: PathBlocker = () => false,
 ) {
-  return visualEvaluator(display, settings)(seat);
+  const result = visualEvaluator(display, settings)(seat);
+  return blocked(screenOrigin(display), seat)
+    ? { ...result, pass: false, status: "red" as const, obstructed: true }
+    : { ...result, obstructed: false };
 }
 function visualEvaluator(display: PlacedDevice, settings: EngineeringSettings) {
   const quaternion = orientation(display).invert();
@@ -147,18 +151,19 @@ export function engineeringAudit(state: DeviceState, room: RoomSize) {
   );
   const displays = devices.filter((d) => d.kind === "display"),
     speakers = devices.filter((d) => d.kind === "speaker");
+  const blocked = simulationBlocker(state.environment);
   const seats = roomLayout(room).seats;
   const visual = seats.map((seat) => ({
     ...seat,
     results: displays.map((d) => ({
       deviceId: d.id,
-      ...visualCheck(d, seat.position, state.engineering),
+      ...visualCheck(d, seat.position, state.engineering, blocked),
     })),
   }));
   const failures = visual.filter((s) => !s.results.some((r) => r.pass));
+  const acoustic = analyzeAudio({ ...state, room }, "speaker");
   const field: FieldPoint[] = [];
-  for (const { x, y, z } of sampleListeningPlane(room)) {
-    const spl = directSpl(speakers, { x, y, z });
+  for (const { x, z, spl } of acoustic.field) {
     field.push({
       x,
       z,
@@ -170,11 +175,13 @@ export function engineeringAudit(state: DeviceState, room: RoomSize) {
       ),
     });
   }
-  const levels = seats
-    .map((seat) => directSpl(speakers, seat.position))
+  const levels = acoustic.seats
+    .map((seat) => seat.spl)
     .filter((n): n is number => n !== null);
   const bom = summarizeBom(state.devices),
     warnings: string[] = [];
+  if (state.environment?.outlines.length)
+    warnings.push("Geometry: imported architecture blocks direct visual/audio paths. Seats and mounting anchors still use configured room/furniture coordinates; verify they lie inside the imported spaces.");
   if (room.capacity !== undefined && seats.length < room.capacity)
     warnings.push(
       `Layout: ${seats.length} of ${room.capacity} requested seats fit; enlarge the room or reduce capacity.`,

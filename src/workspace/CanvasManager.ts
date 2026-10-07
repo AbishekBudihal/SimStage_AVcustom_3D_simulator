@@ -630,7 +630,7 @@ export class CanvasManager {
         layer = new SpatialOverlays(this.scene);
         this.cameraLayers.set(d.id, layer);
       }
-      layer.update("camera", state, "All", null, cameraCoverage(d, state.room));
+      layer.update("camera", state, "All", null, cameraCoverage(d, state.room, state.environment));
     }
     this.invalidate();
   }

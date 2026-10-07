@@ -1,3 +1,5 @@
+import { simulationBlocker } from "./SimulationGeometry";
+import type { ImportedEnvironment } from "./EnvironmentImport";
 import { clipRoom } from "./RoomClip";
 import * as T from "three";
 import type { DeviceState, PlacedDevice, RoomSize, XYZ } from "./DeviceStore";
@@ -35,7 +37,9 @@ const validFov = (n: number | undefined) =>
 export function cameraCoverage(
   device: PlacedDevice,
   room: RoomSize,
+  environment?: ImportedEnvironment | null,
 ): OpticalResult {
+  const blocked = simulationBlocker(environment);
   const origin = vector(device.position),
     q = orientation(device),
     inverse = q.clone().invert(),
@@ -50,7 +54,9 @@ export function cameraCoverage(
         hfov === null ? null : front && horizontal <= hfov / 2 + 1e-8,
       verticalInside =
         vfov === null ? null : front && vertical <= vfov / 2 + 1e-8;
+    const obstructed = blocked(device.position, s.position);
     const reasons: string[] = [];
+    if (obstructed) reasons.push("Direct path blocked by imported architecture");
     if (!front) reasons.push("Behind camera");
     if (horizontalInside === false) reasons.push("Outside horizontal FOV");
     if (verticalInside === false) reasons.push("Outside vertical FOV");
@@ -66,7 +72,7 @@ export function cameraCoverage(
       verticalInside,
       front,
       status:
-        !front || horizontalInside === false || verticalInside === false
+        obstructed || !front || horizontalInside === false || verticalInside === false
           ? "outside"
           : hfov === null || vfov === null
             ? "unknown"
@@ -138,25 +144,27 @@ export function cameraCoverage(
     vfov,
     assumptions: [
       "Rectilinear FOV; camera lens uses mounting anchor (lens offset unknown).",
-      "Room-clipped geometry only; no furniture/person occlusion, autofocus or pixels-on-target.",
+      "Room-clipped geometry only; imported architecture occludes seat checks; no furniture/person occlusion, autofocus or pixels-on-target.",
     ],
   };
 }
 /** Reuses active viewing criteria; planar distance for limits, 3D distance for reporting. */
 export function displayViewing(
   device: PlacedDevice,
-  state: Pick<DeviceState, "room" | "engineering">,
+  state: Pick<DeviceState, "room" | "engineering"> & Partial<Pick<DeviceState, "environment">>,
 ): OpticalResult {
+  const blocked = simulationBlocker(state.environment);
   const origin = screenOrigin(device),
     q = orientation(device),
     direction = new T.Vector3(0, 0, 1).applyQuaternion(q);
   const seats: OpticalSeat[] = roomLayout(state.room).seats.map((s) => {
-    const r = visualCheck(device, s.position, state.engineering),
+    const r = visualCheck(device, s.position, state.engineering, blocked),
       local = vector(s.position)
         .sub(origin)
         .applyQuaternion(q.clone().invert());
     const front = local.z > 0,
       reasons: string[] = [];
+    if (r.obstructed) reasons.push("Direct path blocked by imported architecture");
     if (!front) reasons.push("Behind display screen");
     if (r.status === "unknown") reasons.push("Image height Unknown");
     if (r.distance > Math.min(r.heuristicMax, r.bdmMax))
