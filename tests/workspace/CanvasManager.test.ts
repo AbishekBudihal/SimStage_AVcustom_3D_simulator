@@ -374,6 +374,9 @@ it("integrates saved architecture with the live store, scene and unchanged AV gr
   store.api.getState().setEnvironment(plan);
   const first = manager.scene.getObjectByName("Imported environment")!;
   expect(first.children).toHaveLength(4);
+  expect(manager.scene.getObjectByName("Architectural room")!.visible).toBe(false);
+  manager.setRoom({ ...manager.room, width: 12 });
+  expect(manager.scene.getObjectByName("Architectural room")!.visible).toBe(false);
   const oldMesh = first.children[0] as THREE.Mesh,
     dispose = vi.spyOn(oldMesh.geometry, "dispose");
   const state = store.api.getState();
@@ -393,6 +396,7 @@ it("integrates saved architecture with the live store, scene and unchanged AV gr
   expect(blocked({ x: 0, y: 1, z: -4 }, { x: 0, y: 1, z: 0 })).toBe(true);
   store.api.getState().setEnvironment(null);
   expect(manager.scene.getObjectByName("Imported environment")).toBeUndefined();
+  expect(manager.scene.getObjectByName("Architectural room")!.visible).toBe(true);
   expect(store.api.getState().connections).toBe(before.connections);
   unsubscribe();
 });

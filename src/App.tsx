@@ -45,7 +45,7 @@ export default function App() {
     room = useStore(store.api, (s) => s.room);
   const audit = useMemo(
     () => engineeringAudit(store.api.getState(), room),
-    [devices, connections, settings, store, room],
+    [devices, connections, settings, store, room, environment],
   );
   const host = useRef<HTMLDivElement>(null),
     canvas = useRef<CanvasManager | null>(null);
@@ -158,19 +158,19 @@ export default function App() {
       candidates[0];
     return device
       ? mode === "camera"
-        ? cameraCoverage(device, room)
+        ? cameraCoverage(device, room, environment)
         : displayViewing(device, store.api.getState())
       : undefined;
-  }, [mode, devices, selectedId, analysisIds, room, settings, store]);
+  }, [mode, devices, selectedId, analysisIds, room, settings, store, environment]);
   const [audioScope, setAudioScope] = useState<"room" | "device">("room");
   const [audioLayer, setAudioLayer] = useState<"coverage" | "spl">("coverage");
   const roomMic = useMemo(
     () => analyzeAudio(store.api.getState(), "microphone"),
-    [devices, room, store],
+    [devices, room, store, environment],
   );
   const roomSpeaker = useMemo(
     () => analyzeAudio(store.api.getState(), "speaker"),
-    [devices, room, store],
+    [devices, room, store, environment],
   );
   const audio = useMemo(() => {
     if (mode !== "microphone" && mode !== "speaker") return undefined;
@@ -181,7 +181,7 @@ export default function App() {
       all.devices.find((d) => d.deviceId === analysisIds[mode])?.deviceId ??
       all.devices[0]?.deviceId;
     return id ? analyzeAudio(store.api.getState(), mode, id) : all;
-  }, [mode, roomMic, roomSpeaker, audioScope, selectedId, analysisIds, store]);
+  }, [mode, roomMic, roomSpeaker, audioScope, selectedId, analysisIds, store, environment]);
   const routes = useMemo(
     () => cableRoutes(store.api.getState()),
     [devices, connections, room, store],
@@ -294,6 +294,7 @@ export default function App() {
       audio,
     );
   }, [
+    environment,
     pressureResult,
     pressureSettings,
     floorLayer,

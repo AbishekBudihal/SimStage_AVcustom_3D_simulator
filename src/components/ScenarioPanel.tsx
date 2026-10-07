@@ -7,6 +7,7 @@ import type {
 } from "../workspace/ScenarioSimulation";
 
 export function ScenarioPanel({ store }: { store: DeviceStore }) {
+  const environment = useStore(store.api, (s) => s.environment);
   const config = useStore(store.api, (s) => s.scenario),
     room = useStore(store.api, (s) => s.room),
     devices = useStore(store.api, (s) => s.devices),
@@ -19,11 +20,14 @@ export function ScenarioPanel({ store }: { store: DeviceStore }) {
       devices: typeof devices;
       connections: typeof connections;
       engineering: typeof engineering;
+      environment: typeof environment;
       report: ScenarioReport;
     } | null>(null),
     [error, setError] = useState("");
   useEffect(() => {
     if (!enabled) return;
+    let cancelled = false;
+    setError("");
     let worker: Worker | undefined;
     const timer = setTimeout(() => {
       try {
@@ -34,8 +38,10 @@ export function ScenarioPanel({ store }: { store: DeviceStore }) {
         worker.onmessage = (
           e: MessageEvent<{ report?: ScenarioReport; error?: string }>,
         ) => {
+          if (cancelled) return;
           if (e.data.report)
             setResult({
+              environment,
               config,
               room,
               devices,
@@ -47,11 +53,12 @@ export function ScenarioPanel({ store }: { store: DeviceStore }) {
           worker?.terminate();
         };
         worker.onerror = () => {
+          if (cancelled) return;
           setError("Scenario worker failed. Try running again.");
           worker?.terminate();
         };
         worker.postMessage({
-          state: { room, devices, connections, engineering },
+          state: { room, devices, connections, engineering, environment },
           config,
         });
       } catch (e) {
@@ -59,15 +66,17 @@ export function ScenarioPanel({ store }: { store: DeviceStore }) {
       }
     }, 250);
     return () => {
+      cancelled = true;
       clearTimeout(timer);
       worker?.terminate();
     };
-  }, [enabled, config, room, devices, connections, engineering]);
+  }, [enabled, config, room, devices, connections, engineering, environment]);
   const report =
     result?.config === config &&
     result.room === room &&
     result.devices === devices &&
     result.connections === connections &&
+    result.environment === environment &&
     result.engineering === engineering
       ? result.report
       : null;

@@ -1,3 +1,4 @@
+import { simulationBlocker, type PathBlocker } from "./SimulationGeometry";
 import { clipRoom } from "./RoomClip";
 import * as T from "three";
 import type { PlacedDevice, RoomSize, XYZ, DeviceState } from "./DeviceStore";
@@ -9,11 +10,12 @@ const radToDeg = 180 / Math.PI;
 export function directSpl(
   speakers: readonly PlacedDevice[],
   point: XYZ,
+  blocked: PathBlocker = () => false,
 ): number | null {
   let energy = 0;
   for (const speaker of speakers) {
     const m = speaker.metadata;
-    if (m.speakerWatts === 0) continue;
+    if (m.speakerWatts === 0 || blocked(speaker.position, point)) continue;
     let reference = m.referenceSplDb ?? m.splAt1m;
     let referenceDistance =
       m.referenceSplDb !== undefined ? m.referenceDistanceM : 1;
@@ -347,7 +349,7 @@ function geometry(
 }
 /** Coverage is a union. Complete SPL uses incoherent energy summation; missing contributors keep total Unknown. */
 export function analyzeAudio(
-  state: Pick<DeviceState, "room" | "devices">,
+  state: Pick<DeviceState, "room" | "devices"> & Partial<Pick<DeviceState, "environment">>,
   kind: "microphone" | "speaker",
   onlyId?: string,
 ): AudioAnalysis {
@@ -359,19 +361,26 @@ export function analyzeAudio(
   );
   const evaluate = kind === "microphone" ? microphonePoint : speakerPoint,
     seats = roomLayout(state.room).seats;
+  const blocked = simulationBlocker(state.environment);
+  const evaluatePath = (d: PlacedDevice, point: XYZ): AudioPoint => {
+    const result = evaluate(d, point);
+    return blocked(d.position, point)
+      ? { ...result, status: "outside", spl: null, reasons: [...result.reasons, "Direct path blocked by imported architecture"] }
+      : result;
+  };
   const combine = (
     point: XYZ,
   ): Pick<AudioPoint, "status" | "reasons" | "spl"> => {
-    const values = devices.map((d) => evaluate(d, point));
+    const values = devices.map((d) => evaluatePath(d, point));
     const known = values.flatMap((v) => (v.spl === null ? [] : [v.spl]));
-    const muted = devices.filter((d) => d.metadata.speakerWatts === 0).length;
+    const silent = devices.filter((d) => d.metadata.speakerWatts === 0 || blocked(d.position, point)).length;
     return {
       status: unionCoverage(values.map((v) => v.status)),
       reasons: values.flatMap((v, i) =>
         v.reasons.map((r) => `${devices[i].metadata.label}: ${r}`),
       ),
       spl:
-        kind === "speaker" && known.length + muted === devices.length
+        kind === "speaker" && known.length + silent === devices.length
           ? combineLevels(known)
           : null,
     };
@@ -382,7 +391,7 @@ export function analyzeAudio(
     direction: new T.Vector3(0, 0, 1).applyQuaternion(audioOrientation(d)),
     segments: geometry(d, state.room, kind),
     seats: seats.map((s) => ({
-      ...evaluate(d, s.position),
+      ...evaluatePath(d, s.position),
       id: s.id,
       position: s.position,
     })),

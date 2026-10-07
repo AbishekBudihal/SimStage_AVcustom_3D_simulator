@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 import { createModule, LibreDwg } from "@mlightcad/libredwg-web";
 import wasmUrl from "../../node_modules/@mlightcad/libredwg-web/wasm/libredwg-web.wasm?url";
+import { dwgReadWarnings } from "./DwgReadPolicy";
 import { extractDwg } from "./DwgImport";
 self.onmessage = async (
   event: MessageEvent<{ data: ArrayBuffer; name: string }>,
@@ -16,21 +17,14 @@ self.onmessage = async (
     module.FS.writeFile("input.dwg", new Uint8Array(data));
     const result = module.dwg_read_file("input.dwg");
     module.FS.unlink("input.dwg");
-    // Reject partial decoder errors instead of silently extruding damaged drawings.
-    if (result.error || !result.data)
-      throw Error(
-        `LibreDWG rejected this drawing (code ${result.error}). Recover/resave it in CAD or export DXF.`,
-      );
+    const warnings = dwgReadWarnings(result.error);
+    if (!result.data) throw Error("LibreDWG returned no drawing data. Recover/resave the drawing or export DXF.");
     const lib = LibreDwg.createByWasmInstance(module);
     try {
       const { database, stats } = lib.convertEx(result.data);
-      self.postMessage({
-        drawing: extractDwg(
-          database,
-          event.data.name,
-          stats.unknownEntityCount,
-        ),
-      });
+      const drawing = extractDwg(database, event.data.name, stats.unknownEntityCount);
+      drawing.warnings.push(...warnings);
+      self.postMessage({ drawing });
     } finally {
       lib.dwg_free(result.data);
     }
