@@ -1,3 +1,4 @@
+import { SpecificationInspector } from "./SpecificationInspector";
 import { useStore } from "zustand";
 import {
   DeviceStore,
@@ -249,6 +250,7 @@ export function PropertyInspector({
           </label>
         );
       })}
+      <SpecificationInspector key={selected.id} store={store} device={selected} />
       <button
         className="mt-5 w-full rounded-md border border-solid border-rose-900 bg-transparent py-2 text-xs text-rose-300 hover:bg-rose-950"
         onClick={() => store.remove(selected.id)}

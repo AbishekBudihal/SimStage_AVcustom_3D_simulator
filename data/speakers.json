@@ -6,10 +6,75 @@
     "category": "speaker",
     "type": "ceiling_speaker",
     "family": "AcousticDesign",
-    "physical": { "width": 0.20, "height": 0.12, "depth": 0.20 },
-    "speaker": { "mount": "ceiling", "dispersionDeg": 130, "maxSplAt1m": 113, "sensitivityDb": 89, "frequencyResponse": "75Hz-20kHz", "powerRating": "75W @ 70/100V or 8ohm", "powerClass": "passive" },
-    "provenance": "estimated",
-    "source": "Publicly listed spec-sheet figures for this model line; verify against QSC's current datasheet."
+    "physical": {
+      "width": 0.28,
+      "height": 0.237,
+      "depth": 0.28,
+      "weightKg": 4.3
+    },
+    "speaker": {
+      "mount": "ceiling",
+      "dispersionDeg": 135,
+      "maxSplAt1m": 106,
+      "sensitivityDb": 88,
+      "frequencyResponse": "65 Hz-20 kHz (effective range)",
+      "maxSpeakerWatts": 60,
+      "powerRating": "60 W rated noise power; 16 ohm bypass or 70/100 V taps",
+      "powerClass": "passive"
+    },
+    "provenance": "partially_verified",
+    "source": "https://www.qsys.com/resource-files/productresources/spk/ad/ad-c6t/q_spk_adc_6t_specsheet.pdf",
+    "specificationEvidence": {
+      "sensitivityDb": {
+        "value": 88,
+        "basis": "manufacturer",
+        "source": "https://www.qsys.com/resource-files/productresources/spk/ad/ad-c6t/q_spk_adc_6t_specsheet.pdf",
+        "checkedOn": "2026-10-07",
+        "conditions": "AD-C6T-BK/WH, datasheet 08/08/2022 p2. Sensitivity 1 W/1 m reference, 200-10kHz average; coverage 500-5kHz average; max SPL is calculated continuous 106 dB (peak 112 dB is not used for sustained estimates). Drive power and acoustic response remain assumptions."
+      },
+      "coverageDegrees": {
+        "value": 135,
+        "basis": "manufacturer",
+        "source": "https://www.qsys.com/resource-files/productresources/spk/ad/ad-c6t/q_spk_adc_6t_specsheet.pdf",
+        "checkedOn": "2026-10-07",
+        "conditions": "AD-C6T-BK/WH, datasheet 08/08/2022 p2. Sensitivity 1 W/1 m reference, 200-10kHz average; coverage 500-5kHz average; max SPL is calculated continuous 106 dB (peak 112 dB is not used for sustained estimates). Drive power and acoustic response remain assumptions."
+      },
+      "maxSpl": {
+        "value": 106,
+        "basis": "manufacturer",
+        "source": "https://www.qsys.com/resource-files/productresources/spk/ad/ad-c6t/q_spk_adc_6t_specsheet.pdf",
+        "checkedOn": "2026-10-07",
+        "conditions": "AD-C6T-BK/WH, datasheet 08/08/2022 p2. Sensitivity 1 W/1 m reference, 200-10kHz average; coverage 500-5kHz average; max SPL is calculated continuous 106 dB (peak 112 dB is not used for sustained estimates). Drive power and acoustic response remain assumptions."
+      },
+      "weightKg": {
+        "value": 4.3,
+        "basis": "manufacturer",
+        "source": "https://www.qsys.com/resource-files/productresources/spk/ad/ad-c6t/q_spk_adc_6t_specsheet.pdf",
+        "checkedOn": "2026-10-07",
+        "conditions": "AD-C6T-BK/WH, datasheet 08/08/2022 p2. Sensitivity 1 W/1 m reference, 200-10kHz average; coverage 500-5kHz average; max SPL is calculated continuous 106 dB (peak 112 dB is not used for sustained estimates). Drive power and acoustic response remain assumptions."
+      },
+      "widthM": {
+        "value": 0.28,
+        "basis": "manufacturer",
+        "source": "https://www.qsys.com/resource-files/productresources/spk/ad/ad-c6t/q_spk_adc_6t_specsheet.pdf",
+        "checkedOn": "2026-10-07",
+        "conditions": "AD-C6T-BK/WH, datasheet 08/08/2022 p2. Sensitivity 1 W/1 m reference, 200-10kHz average; coverage 500-5kHz average; max SPL is calculated continuous 106 dB (peak 112 dB is not used for sustained estimates). Drive power and acoustic response remain assumptions."
+      },
+      "heightM": {
+        "value": 0.237,
+        "basis": "manufacturer",
+        "source": "https://www.qsys.com/resource-files/productresources/spk/ad/ad-c6t/q_spk_adc_6t_specsheet.pdf",
+        "checkedOn": "2026-10-07",
+        "conditions": "AD-C6T-BK/WH, datasheet 08/08/2022 p2. Sensitivity 1 W/1 m reference, 200-10kHz average; coverage 500-5kHz average; max SPL is calculated continuous 106 dB (peak 112 dB is not used for sustained estimates). Drive power and acoustic response remain assumptions."
+      },
+      "depthM": {
+        "value": 0.28,
+        "basis": "manufacturer",
+        "source": "https://www.qsys.com/resource-files/productresources/spk/ad/ad-c6t/q_spk_adc_6t_specsheet.pdf",
+        "checkedOn": "2026-10-07",
+        "conditions": "AD-C6T-BK/WH, datasheet 08/08/2022 p2. Sensitivity 1 W/1 m reference, 200-10kHz average; coverage 500-5kHz average; max SPL is calculated continuous 106 dB (peak 112 dB is not used for sustained estimates). Drive power and acoustic response remain assumptions."
+      }
+    }
   },
   {
     "id": "bose-em90",

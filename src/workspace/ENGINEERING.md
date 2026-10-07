@@ -219,3 +219,28 @@ Users may generate detected room floors/ceilings, edit apertures, save blueprint
 Validation: 199 active workspace tests pass, including actual upstream binary DWG LINE and closed polygon fixtures, metre conversion, layer filtering, block transforms/cycle guards, topology, mesh extrusion and worker success/error/cancel/timeout cleanup. Production browser verification loaded the WASM, decoded a DWG, changed units, extruded ten walls, generated a floor/ceiling, applied/reopened the model and retained the existing signal connection and five AV devices. The upstream fixtures are CAD entity samples; arbitrary customer DWG compatibility is not guaranteed.
 
 GPL notices and exact upstream source-release links are served under public/licenses. Worker separation is for responsiveness, not license isolation. Distribution of the integrated application must meet applicable GPL Corresponding Source and licensing obligations; including notices alone does not establish compliance. No proprietary licensing exception is claimed.
+
+
+### Specification evidence (2026-10-07)
+The active catalog accepts `specificationEvidence`, a map keyed by numeric metadata
+fields or `widthM`/`heightM`/`depthM`. Entries contain `value`, `basis`, `source`,
+`checkedOn` (YYYY-MM-DD), and `conditions`. Bases: manufacturer, user_measured,
+user_entered, derived, estimated. Evidence applies only while its recorded value
+matches the placed-device value. Source declarations do not imply independent
+verification or field validation. Catalog export preserves entries; placed overrides
+remain in DeviceStore and do not modify manufacturer records.
+
+Pressure, optical and audio panels expose incomplete, unverified and source-backed
+input counts. Even entirely source-backed inputs produce parametric planning results:
+the acoustic engine interpolates assumed beamwidth functions rather than measured
+angular polar grids. User-entered band curves do not turn it into a measured polar
+engine. Microphone steering, room STI, lens/zoom calibration, and full licensed DISCAS
+validation are not implemented. All unreviewed catalog profiles retain their original
+estimated/unspecified provenance.
+
+AD-C6T-BK/WH was reviewed against the Q-SYS English datasheet dated 08/08/2022:
+https://www.qsys.com/resource-files/productresources/spk/ad/ad-c6t/q_spk_adc_6t_specsheet.pdf
+Corrected enclosure, weight, sensitivity, coverage and continuous SPL. Sensitivity 88 dB
+is rated 1 W/1 m with 200-10kHz averaging; 135-degree coverage averages 500-5kHz.
+The model uses the 106 dB calculated continuous maximum. The 112 dB peak rating is not used as a sustained operating level.
+No measured frequency/polar dataset was synthesized from these nominal specifications.

@@ -1,3 +1,4 @@
+import { SimulationAccuracy } from "./SimulationAccuracy";
 import { useState } from "react";
 import { useStore } from "zustand";
 import type { DeviceStore } from "../workspace/DeviceStore";
@@ -35,6 +36,7 @@ export function OpticalAnalysisPanel({
   return (
     <section className="optical-analysis">
       <h3>{mode === "camera" ? "Camera coverage" : "Display viewing"}</h3>
+      <SimulationAccuracy layer={mode} devices={device ? [device] : []} />
       <label>
         Analyze device
         <select

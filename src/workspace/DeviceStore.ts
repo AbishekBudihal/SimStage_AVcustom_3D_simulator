@@ -1,3 +1,4 @@
+import { parseEvidence, type SpecificationEvidence } from "./SpecificationEvidence";
 import {
   freezeEnvironment,
   type ImportedEnvironment,
@@ -54,6 +55,7 @@ export interface DevicePort {
   readonly notes?: string;
 }
 export interface DeviceMetadata {
+  readonly specificationEvidence?: SpecificationEvidence;
   readonly acousticBands?: readonly AcousticBand[];
   readonly acousticPhaseDeg?: number;
   readonly acousticDelayMs?: number;
@@ -324,6 +326,7 @@ function freezeDevice(input: PlacedDevice): PlacedDevice {
     ),
     metadata: Object.freeze({
       ...input.metadata,
+      ...(input.metadata.specificationEvidence ? { specificationEvidence: parseEvidence(input.metadata.specificationEvidence) } : {}),
       ...(input.metadata.acousticBands
         ? {
             acousticBands: Object.freeze(

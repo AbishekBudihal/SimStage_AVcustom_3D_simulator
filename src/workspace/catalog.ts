@@ -1,3 +1,4 @@
+import { parseEvidence } from "./SpecificationEvidence";
 import { validateBands, type AcousticBand } from "./PressureModel";
 import type { CatalogCategory } from "./CatalogQuery";
 import { defaultIntent } from "./PlacementSolver";
@@ -354,6 +355,7 @@ export function parseCatalog(
         surfaces,
         ports,
         metadata: {
+          specificationEvidence: parseEvidence(raw.specificationEvidence),
           ...audio,
           weightKg: number(physical.weightKg, "weightKg") ?? null,
           label: `${manufacturer} ${model}`,
@@ -367,6 +369,7 @@ export function parseCatalog(
           acousticBands,
           coverageDegrees,
           maxSpl: number(speaker.maxSplAt1m, "maxSplAt1m"),
+          maxSpeakerWatts: number(speaker.maxSpeakerWatts, "maxSpeakerWatts"),
           speakerWatts:
             number(speaker.drivePowerW, "drivePowerW") ??
             (sensitivityDb !== undefined ? 1 : undefined),

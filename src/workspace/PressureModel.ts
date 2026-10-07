@@ -341,6 +341,8 @@ export function pressureMap(
         d.position.y > state.room.height;
       const valid =
         !outside && power !== undefined && response.every((b) => b !== null);
+      if (power !== undefined && d.metadata.maxSpeakerWatts !== undefined && power > d.metadata.maxSpeakerWatts)
+        warnings.push(`${d.metadata.label}: drive exceeds declared rated power. This linear model does not simulate thermal compression or damage; results above rating are not reliable.`);
       if (!valid)
         warnings.push(
           `${d.metadata.label}: ${outside ? "source outside room" : power === undefined ? "drive power missing" : "sensitivity/dispersion or frequency range incomplete"}`,

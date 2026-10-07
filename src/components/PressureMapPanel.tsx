@@ -1,3 +1,4 @@
+import { SimulationAccuracy } from "./SimulationAccuracy";
 import { useState } from "react";
 import { useStore } from "zustand";
 import type { DeviceStore } from "../workspace/DeviceStore";
@@ -62,6 +63,7 @@ export function PressureMapPanel({
       className="mt-3 rounded-lg border border-solid border-sky-800 p-3"
     >
       <h3>Speaker pressure map</h3>
+      <SimulationAccuracy layer="pressure" devices={speakers.filter((d): d is NonNullable<typeof d> => !!d)} />
       <p className="text-xs text-slate-400">
         User-entered parametric estimate · 1/12-octave calculation bands, not
         lab-measured polar data.
