@@ -209,7 +209,7 @@ export function EnvironmentImporter({ store }: { store: DeviceStore }) {
             Close
           </button>
         </header>
-        <details open={!draft}>
+        <details open={!draft && !cad}>
           <summary>Import source / new blueprint</summary>
           <button
             onClick={() => {
@@ -729,9 +729,10 @@ export function EnvironmentImporter({ store }: { store: DeviceStore }) {
               BOM remain in the active store. Imported surfaces are not
               automatically assigned seats or equipment mounting anchors.
             </p>
+            <p role="status">{draft.outlines.length ? `${draft.outlines.length} geometry elements ready. Apply below to display them in the workspace.` : "No 3D geometry yet. Calibrate the blueprint, then trace walls or room boundaries before applying."}</p>
             <footer>
               <button
-                disabled={!calibrated || busy}
+                disabled={!calibrated || busy || !draft.outlines.length}
                 onClick={() =>
                   attempt(() => {
                     store.api
@@ -741,10 +742,10 @@ export function EnvironmentImporter({ store }: { store: DeviceStore }) {
                   })
                 }
               >
-                Apply to workspace
+                Show imported model in workspace
               </button>
               <button
-                disabled={!calibrated || busy}
+                disabled={!calibrated || busy || !draft.outlines.length}
                 onClick={() =>
                   attempt(() => {
                     const plan = freezeEnvironment(draft),

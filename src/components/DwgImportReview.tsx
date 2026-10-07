@@ -30,11 +30,29 @@ export function DwgImportReview({
         {drawing.name} · {drawing.paths.length} supported paths. Select only
         architectural layers; selected paths are blue.
       </p>
+      <div className="blueprint-actions">
+      <button
+        disabled={!scale || !selected.length}
+        onClick={() => {
+          try {
+            onBuild(
+              extrudeCad(drawing, selected, scale, height, thickness, mode),
+            );
+          } catch (e) {
+            setError(e instanceof Error ? e.message : String(e));
+          }
+        }}
+      >
+        Extrude selected layers
+      </button>
+      <button onClick={onCancel}>Cancel DWG setup</button>
+      </div>
+      <p role="status">{!selected.length ? "Select architectural layers below to enable extrusion." : !scale ? "Confirm drawing units below to enable extrusion." : `${selected.length} layers ready for extrusion.`}</p>
       <svg
         role="img"
         aria-label="Decoded DWG layer preview"
         viewBox={`${minX - pad} ${minY - pad} ${width + pad * 2} ${depth + pad * 2}`}
-        style={{ width: "100%", height: 260, background: "#edf2f7" }}
+        style={{ width: "100%", height: 180, background: "#edf2f7" }}
       >
         {drawing.paths.map((p) => (
           <polyline
@@ -137,21 +155,6 @@ export function DwgImportReview({
         ))}
       </details>
       {error && <p role="alert">{error}</p>}
-      <button
-        disabled={!scale || !selected.length}
-        onClick={() => {
-          try {
-            onBuild(
-              extrudeCad(drawing, selected, scale, height, thickness, mode),
-            );
-          } catch (e) {
-            setError(e instanceof Error ? e.message : String(e));
-          }
-        }}
-      >
-        Extrude selected layers
-      </button>
-      <button onClick={onCancel}>Cancel DWG setup</button>
       <p>
         <a
           href="/licenses/LibreDWG-NOTICE.txt"

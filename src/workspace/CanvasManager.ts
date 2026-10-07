@@ -48,6 +48,8 @@ export class CanvasManager {
       ? environmentGroup(value, () => this.invalidate())
       : undefined;
     if (this.environmentMesh) this.scene.add(this.environmentMesh);
+    this.roomGroup.visible = !value?.outlines.length;
+    this.setView(this.view === "seat" ? "isometric" : this.view, false);
     this.invalidate();
   }
   readonly scene = new THREE.Scene();
@@ -154,6 +156,7 @@ export class CanvasManager {
     this.grid.visible = false;
     this.scene.add(this.grid);
     this.roomGroup = this.roomAssets.room(room);
+    this.roomGroup.visible = !this.environment?.outlines.length;
     this.scene.add(this.roomGroup);
     this.fitLighting();
     this.observer = new ResizeObserver(() => this.resize());
@@ -236,6 +239,7 @@ export class CanvasManager {
     this.currentRoom = room;
     this.roomAssets = new SpatialAssets();
     this.roomGroup = this.roomAssets.room(room);
+    this.roomGroup.visible = !this.environment?.outlines.length;
     const size = Math.ceil(Math.max(room.width, room.depth));
     this.grid = new THREE.GridHelper(size, size * 2, 0x526075, 0x29313e);
     this.grid.position.y = 0.033;
@@ -635,7 +639,9 @@ export class CanvasManager {
     this.navigation?.stop();
     this.view = view;
     this.grid.visible = view === "plan";
-    const centre = new THREE.Vector3(0, this.room.height / 2, 0);
+    const bounds = this.roomBounds();
+    const centre = bounds.getCenter(new THREE.Vector3());
+    this.distance = Math.max(...bounds.getSize(new THREE.Vector3()).toArray()) * 2;
     if (view === "seat") {
       this.activeCamera = this.seatCamera;
       const eye = eyeHeight(this.room);
@@ -661,6 +667,10 @@ export class CanvasManager {
     this.resize();
   }
   private roomBounds() {
+    if (this.environmentMesh && this.environment?.outlines.length) {
+      const bounds = new THREE.Box3().setFromObject(this.environmentMesh);
+      if (!bounds.isEmpty()) return bounds;
+    }
     return new THREE.Box3(
       new THREE.Vector3(-this.room.width / 2, 0, -this.room.depth / 2),
       new THREE.Vector3(
