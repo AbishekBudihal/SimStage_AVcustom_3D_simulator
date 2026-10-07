@@ -82,11 +82,16 @@ export function BlueprintInspector({
         disabled={!graph.rooms.length}
         onClick={() =>
           attempt(() => {
-            const surfaces = roomSurfaces(plan, 3);
+            const ceilingHeight = Math.max(
+              ...plan.outlines
+                .filter((o) => o.kind === "wall")
+                .map((o) => o.elevation + o.height),
+            );
+            const surfaces = roomSurfaces(plan, ceilingHeight);
             onChange(
               freezeEnvironment({
                 ...plan,
-                zoneCeilingHeight: 3,
+                zoneCeilingHeight: ceilingHeight,
                 outlines: [
                   ...plan.outlines.filter((o) => !o.id.startsWith("zone-")),
                   ...surfaces,
@@ -116,6 +121,7 @@ export function BlueprintInspector({
       </select>
       {item && (
         <>
+          {item.layer && <p>CAD layer: {item.layer}</p>}
           {!item.segment && (
             <label>
               Surface type
