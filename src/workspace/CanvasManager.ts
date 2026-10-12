@@ -48,9 +48,14 @@ export class CanvasManager {
       ? environmentGroup(value, () => this.invalidate())
       : undefined;
     if (this.environmentMesh) this.scene.add(this.environmentMesh);
-    this.roomGroup.visible = !value?.outlines.length;
+    this.syncImportedShell();
     this.setView(this.view === "seat" ? "isometric" : this.view, false);
     this.invalidate();
+  }
+  private syncImportedShell() {
+    this.roomGroup.visible = true;
+    for (const child of this.roomGroup.children)
+      child.visible = child.name === "Furniture" || !this.environment?.outlines.length;
   }
   readonly scene = new THREE.Scene();
   private readonly overviewCamera = new THREE.OrthographicCamera(
@@ -156,7 +161,7 @@ export class CanvasManager {
     this.grid.visible = false;
     this.scene.add(this.grid);
     this.roomGroup = this.roomAssets.room(room);
-    this.roomGroup.visible = !this.environment?.outlines.length;
+    this.syncImportedShell();
     this.scene.add(this.roomGroup);
     this.fitLighting();
     this.observer = new ResizeObserver(() => this.resize());
@@ -239,7 +244,7 @@ export class CanvasManager {
     this.currentRoom = room;
     this.roomAssets = new SpatialAssets();
     this.roomGroup = this.roomAssets.room(room);
-    this.roomGroup.visible = !this.environment?.outlines.length;
+    this.syncImportedShell();
     const size = Math.ceil(Math.max(room.width, room.depth));
     this.grid = new THREE.GridHelper(size, size * 2, 0x526075, 0x29313e);
     this.grid.position.y = 0.033;

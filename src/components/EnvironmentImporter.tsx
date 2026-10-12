@@ -1,3 +1,4 @@
+import { readDxfDrawing } from "../workspace/DxfDrawing";
 import { DwgImportReview } from "./DwgImportReview";
 import { decodeDwg } from "../workspace/DwgDecoder";
 import type { CadDrawing } from "../workspace/DwgImport";
@@ -17,7 +18,6 @@ import type { DeviceStore } from "../workspace/DeviceStore";
 import {
   calibration,
   freezeEnvironment,
-  parseDxf,
   validateOutline,
   type ImportedEnvironment,
   type PlanPoint,
@@ -115,9 +115,9 @@ export function EnvironmentImporter({ store }: { store: DeviceStore }) {
           "PDF page rendered locally. Calibrate and trace; embedded CAD semantics are not inferred.",
         ];
       } else if (/\.dxf$/i.test(file.name)) {
-        const result = parseDxf(await file.text());
-        plan = { ...result.plan, name: file.name };
-        warnings = result.warnings;
+        const drawing = readDxfDrawing(await file.text(), file.name);
+        if (ticket === serial.current) setCad(drawing);
+        return;
       } else if (/\.(png|jpe?g)$/i.test(file.name)) {
         const data = await new Promise<string>((resolve, reject) => {
           const r = new FileReader();
@@ -283,6 +283,7 @@ export function EnvironmentImporter({ store }: { store: DeviceStore }) {
         {cad && (
           <DwgImportReview
             drawing={cad}
+            onApply={(plan) => { store.api.getState().setEnvironment(plan); close(); }}
             onCancel={() => setCad(null)}
             onBuild={(plan) => {
               setDraft(plan);

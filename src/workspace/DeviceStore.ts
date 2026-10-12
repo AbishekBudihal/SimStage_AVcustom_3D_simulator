@@ -122,6 +122,8 @@ export interface FurnitureEdit {
   readonly height?: number;
 }
 export interface RoomSize {
+  readonly furnitureLayout?: "u_shape" | "theater";
+  readonly chairStyle?: "task" | "executive" | "visitor";
   readonly furniture?: Readonly<Record<string, FurnitureEdit>>;
   readonly table?: TableSettings;
   readonly eyeHeightM?: number;
@@ -401,6 +403,8 @@ export function createDeviceStore(): StoreApi<DeviceState> {
             room.capacity < 0 ||
             room.capacity > 200)) ||
         (room.roomType !== undefined && !ROOM_TYPES.includes(room.roomType)) ||
+        (room.furnitureLayout !== undefined && !["u_shape", "theater"].includes(room.furnitureLayout)) ||
+        (room.chairStyle !== undefined && !["task", "executive", "visitor"].includes(room.chairStyle)) ||
         room.width < 3 ||
         room.width > 30 ||
         room.depth < 3 ||

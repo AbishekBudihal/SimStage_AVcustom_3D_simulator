@@ -385,16 +385,25 @@ export class SpatialAssets {
       const cushion = this.rounded(0.49, 0.11, 0.49, 0x394951, 0, 0.46, 0);
       cushion.material = this.finish("fabric", 0x394951);
       chair.add(cushion);
-      const back = this.rounded(0.49, 0.52, 0.085, 0x394951, 0, 0.74, -0.22);
+      const executive = room.chairStyle === "executive";
+      const back = this.rounded(0.49, executive ? 0.72 : 0.52, 0.085, 0x394951, 0, executive ? 0.84 : 0.74, -0.22);
       back.rotation.x = -0.1;
       chair.add(back);
       for (const x of [-0.27, 0.27]) {
         chair.add(this.rounded(0.045, 0.035, 0.32, 0x27333b, x, 0.65, 0));
         chair.add(this.box(0.025, 0.18, 0.025, 0x79858a, x, 0.55, 0.1));
       }
-      for (const x of [-0.18, 0.18])
-        for (const z of [-0.18, 0.18])
-          chair.add(this.box(0.025, 0.43, 0.025, 0x6a7983, x, 0.215, z));
+      if (room.chairStyle === "task" || executive) {
+        chair.add(this.cylinder(.045,.4,0x6a7983,0,.22,0));
+        for(let i=0;i<5;i++) {
+          const angle=i*Math.PI*2/5;
+          const spoke=this.box(.025,.03,.27,0x6a7983,Math.sin(angle)*.13,.065,Math.cos(angle)*.13);
+          spoke.rotation.y=angle; chair.add(spoke);
+          const wheel=this.cylinder(.035,.04,0x202b35,Math.sin(angle)*.27,.035,Math.cos(angle)*.27);
+          wheel.rotation.z=Math.PI/2; chair.add(wheel);
+        }
+      } else for (const x of [-0.18, 0.18]) for (const z of [-0.18, 0.18])
+        chair.add(this.box(0.025, 0.43, 0.025, 0x6a7983, x, 0.215, z));
       chair.traverse((o) => {
         o.userData.furnitureId = `seat:${seat.id}`;
       });

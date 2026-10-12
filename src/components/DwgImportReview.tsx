@@ -1,3 +1,5 @@
+import { roomSurfaces } from "../workspace/BlueprintTopology";
+import { freezeEnvironment } from "../workspace/EnvironmentImport";
 import { useState } from "react";
 import { cadUnits, extrudeCad, type CadDrawing } from "../workspace/DwgImport";
 import type { ImportedEnvironment } from "../workspace/EnvironmentImport";
@@ -5,11 +7,14 @@ export function DwgImportReview({
   drawing,
   onBuild,
   onCancel,
+  onApply,
 }: {
   drawing: CadDrawing;
   onBuild: (plan: ImportedEnvironment) => void;
   onCancel: () => void;
+  onApply?: (plan: ImportedEnvironment) => void;
 }) {
+  const [floors, setFloors] = useState(true);
   const layers = [...new Set(drawing.paths.map((p) => p.layer))].sort();
   const [selected, setSelected] = useState<string[]>([]),
     [scale, setScale] = useState(drawing.metersPerUnit ?? 0),
@@ -17,6 +22,11 @@ export function DwgImportReview({
     [thickness, setThickness] = useState(0.2),
     [mode, setMode] = useState<"walls" | "footprints">("walls"),
     [error, setError] = useState("");
+  const build = () => {
+    const plan = extrudeCad(drawing, selected, scale, height, thickness, mode);
+    const slabs = floors ? roomSurfaces(plan, Math.max(2, height)).filter(o => o.kind === "floor") : [];
+    return freezeEnvironment({ ...plan, outlines: [...plan.outlines, ...slabs] });
+  };
   const all = drawing.paths.flatMap((p) => p.points),
     minX = Math.min(...all.map((p) => p.x)),
     minY = Math.min(...all.map((p) => p.y)),
@@ -24,33 +34,38 @@ export function DwgImportReview({
     depth = Math.max(1, Math.max(...all.map((p) => p.y)) - minY),
     pad = Math.max(width, depth) * 0.03;
   return (
-    <section className="dwg-review" aria-label="DWG extrusion setup">
-      <h3>DWG → editable architecture</h3>
+    <section className="dwg-review" aria-label="CAD extrusion setup">
+      <h3>CAD layers → editable 3D architecture</h3>
       <p>
         {drawing.name} · {drawing.paths.length} supported paths. Select only
         architectural layers; selected paths are blue.
       </p>
       <div className="blueprint-actions">
+      {onApply && <button disabled={!scale || !selected.length} onClick={() => {
+        try { onApply(build()); }
+        catch(e) { setError(e instanceof Error ? e.message : String(e)); }
+      }}>Extrude & show in workspace</button>}
       <button
         disabled={!scale || !selected.length}
         onClick={() => {
           try {
             onBuild(
-              extrudeCad(drawing, selected, scale, height, thickness, mode),
+              build(),
             );
           } catch (e) {
             setError(e instanceof Error ? e.message : String(e));
           }
         }}
       >
-        Extrude selected layers
+        Preview / edit extrusion
       </button>
-      <button onClick={onCancel}>Cancel DWG setup</button>
+      <button onClick={onCancel}>Cancel CAD setup</button>
       </div>
       <p role="status">{!selected.length ? "Select architectural layers below to enable extrusion." : !scale ? "Confirm drawing units below to enable extrusion." : `${selected.length} layers ready for extrusion.`}</p>
+      <p>1. Select wall layers · 2. Confirm units and height · 3. Extrude · 4. Show model in workspace.</p>
       <svg
         role="img"
-        aria-label="Decoded DWG layer preview"
+        aria-label="Decoded CAD layer preview"
         viewBox={`${minX - pad} ${minY - pad} ${width + pad * 2} ${depth + pad * 2}`}
         style={{ width: "100%", height: 180, background: "#edf2f7" }}
       >
@@ -94,7 +109,7 @@ export function DwgImportReview({
         <label>
           Drawing units
           <select
-            aria-label="DWG drawing units"
+            aria-label="CAD drawing units"
             value={scale}
             onChange={(e) => setScale(Number(e.target.value))}
           >
@@ -109,7 +124,7 @@ export function DwgImportReview({
         <label>
           Interpret selected linework
           <select
-            aria-label="DWG extrusion mode"
+            aria-label="CAD extrusion mode"
             value={mode}
             onChange={(e) => setMode(e.target.value as typeof mode)}
           >
@@ -120,7 +135,7 @@ export function DwgImportReview({
         <label>
           Wall height (m)
           <input
-            aria-label="DWG wall height"
+            aria-label="CAD wall height"
             type="number"
             min=".1"
             max="30"
@@ -132,7 +147,7 @@ export function DwgImportReview({
         <label>
           Wall thickness (m)
           <input
-            aria-label="DWG wall thickness"
+            aria-label="CAD wall thickness"
             type="number"
             min=".02"
             max="2"
@@ -148,6 +163,7 @@ export function DwgImportReview({
         polygons: use only actual wall footprints, not room perimeters.
         Doors/windows are edited after extrusion.
       </p>
+      <label><input type="checkbox" aria-label="Generate floors for closed zones" checked={floors} onChange={e=>setFloors(e.target.checked)} /> Generate floors for closed room boundaries</label>
       <details>
         <summary>Import report ({drawing.warnings.length})</summary>
         {drawing.warnings.map((w, i) => (
