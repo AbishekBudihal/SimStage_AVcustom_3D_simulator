@@ -19,6 +19,9 @@ export function RoomController({ store }: { store: DeviceStore }) {
             if (preset)
               store.api.getState().setRoom({
                 ...preset.room,
+                furnitureLayout: undefined,
+                table: undefined,
+                furniture: {},
                 capacity: id === "huddle" ? 4 : id === "training" ? 24 : 12,
                 roomType:
                   id === "huddle"
@@ -71,7 +74,7 @@ export function RoomController({ store }: { store: DeviceStore }) {
           onChange={(e) =>
             store.api
               .getState()
-              .setRoom({ roomType: e.target.value as RoomType })
+              .setRoom({ roomType: e.target.value as RoomType, furnitureLayout: undefined })
           }
         >
           {ROOM_TYPES.map((t) => (
@@ -101,6 +104,32 @@ export function RoomController({ store }: { store: DeviceStore }) {
       >
         Fit seats to available space
       </button>
+      <label className="engineering-input">
+        <span>Corporate furniture layout</span>
+        <select aria-label="Corporate furniture layout" value={room.furnitureLayout ?? (room.roomType === "Boardroom" && room.table ? "boardroom" : room.roomType === "Huddle Room" && room.table ? "huddle" : room.roomType === "Training Room" ? "training" : "")} onChange={e => {
+          const options: Record<string, Partial<RoomSize>> = {
+            boardroom: { furnitureLayout: undefined, roomType: "Boardroom", capacity: 12, table: {width:1.6,depth:4.2,height:.75,finish:"walnut",shape:"rounded"}, chairStyle:"executive" },
+            huddle: { furnitureLayout: undefined, roomType: "Huddle Room", capacity:4, table:{width:1.2,depth:1.8,height:.75,finish:"white",shape:"rounded"}, chairStyle:"task" },
+            training: { furnitureLayout: undefined, roomType:"Training Room", capacity:24, table:undefined, chairStyle:"visitor" },
+            u_shape: { furnitureLayout:"u_shape", capacity:18, table:undefined, chairStyle:"task" },
+            theater: { furnitureLayout:"theater", capacity:24, table:undefined, chairStyle:"visitor" },
+          };
+          if(options[e.target.value]) store.api.getState().setRoom({...options[e.target.value], furniture:{}});
+        }}>
+          <option value="">Choose furniture defaults...</option>
+          <option value="boardroom">Executive boardroom table + chairs</option>
+          <option value="huddle">Huddle meeting table + task chairs</option>
+          <option value="training">Training desks + visitor chairs</option>
+          <option value="u_shape">U-shaped workshop tables + task chairs</option>
+          <option value="theater">Presentation seating (no tables)</option>
+        </select>
+      </label>
+      <label className="engineering-input"><span>Chair style</span>
+        <select aria-label="Chair style" value={room.chairStyle ?? "visitor"} onChange={e=>store.api.getState().setRoom({chairStyle:e.target.value as RoomSize["chairStyle"]})}>
+          <option value="task">Task chair with caster base</option><option value="executive">Executive high-back chair</option><option value="visitor">Visitor / training chair</option>
+        </select>
+      </label>
+      <p className="muted fine-print">{roomLayout(room).tables.length} tables / {roomLayout(room).seats.length} seats fit. Choose Edit furniture in the viewport to move tables and chairs.</p>
       <details>
         <summary>Customize tables</summary>
         <label>

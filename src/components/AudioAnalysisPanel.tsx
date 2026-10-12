@@ -1,3 +1,4 @@
+import { SimulationAccuracy } from "./SimulationAccuracy";
 import { useState } from "react";
 import { useStore } from "zustand";
 import type { DeviceStore, DeviceMetadata } from "../workspace/DeviceStore";
@@ -79,6 +80,8 @@ export function AudioAnalysisPanel({
   return (
     <section className="optical-analysis">
       <h3>Audio planning</h3>
+      <SimulationAccuracy layer="microphone" devices={Object.values(state.devices).filter((d): d is NonNullable<typeof d> => !!d && d.kind === "ceiling_mic")} />
+      <SimulationAccuracy layer="speaker" devices={Object.values(state.devices).filter((d): d is NonNullable<typeof d> => !!d && d.kind === "speaker")} />
       <p>Microphones: {summary(microphones)}</p>
       <p>Speakers: {summary(speakers)}</p>
       <p>

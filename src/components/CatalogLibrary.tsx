@@ -202,6 +202,7 @@ export function CatalogLibrary({
               </p>
               <p>
                 {item.provenance}: {item.source}
+                <br />{Object.keys(item.metadata.specificationEvidence ?? {}).length} specifications have field-level source evidence; other values remain unverified.
               </p>
             </details>
           </article>

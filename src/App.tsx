@@ -1,3 +1,6 @@
+import { SimulationProbePanel } from "./components/SimulationProbePanel";
+import { roomLayout } from "./workspace/RoomLayout";
+import { SimulationAccuracy } from "./components/SimulationAccuracy";
 import { EnvironmentImporter } from "./components/EnvironmentImporter";
 import { PressureMapPanel } from "./components/PressureMapPanel";
 import type { PressureResult } from "./workspace/PressureModel";
@@ -146,6 +149,7 @@ export default function App() {
       worker?.terminate();
     };
   }, [floorLayer, devices, room, pressureSettings, environment]);
+  const [showSimulationRays, setShowSimulationRays] = useState(false);
   const [selectedSeat, setSelectedSeat] = useState<string | null>(null);
   const optical = useMemo(() => {
     if (mode !== "camera" && mode !== "display") return undefined;
@@ -277,6 +281,8 @@ export default function App() {
         })),
       );
     else manager?.setHeatmap("off");
+    const probeSeat = roomLayout(room).seats.find(s => s.id === selectedSeat);
+    manager?.setSimulationProbe(store.api.getState(), floorLayer === "pressure" && showSimulationRays && probeSeat ? probeSeat.position : null);
     manager?.setPressureMap(
       floorLayer === "pressure" ? pressureResult : null,
       pressureSettings,
@@ -294,6 +300,7 @@ export default function App() {
       audio,
     );
   }, [
+    showSimulationRays,
     environment,
     pressureResult,
     pressureSettings,
@@ -419,7 +426,12 @@ export default function App() {
                 Camera FOV layer
               </label>
             </div>
-            {floorLayer === "pressure" && (
+            {floorLayer !== "off" && floorLayer !== "auto" && (
+              <SimulationAccuracy layer={floorLayer === "viewing" ? "display" : floorLayer === "microphone" ? "microphone" : floorLayer === "pressure" ? "pressure" : "speaker"}
+                devices={Object.values(devices).filter((d): d is NonNullable<typeof d> => !!d && d.kind === (floorLayer === "viewing" ? "display" : floorLayer === "microphone" ? "ceiling_mic" : "speaker"))} />
+            )}
+            {cameraLayer && <SimulationAccuracy layer="camera" devices={Object.values(devices).filter((d): d is NonNullable<typeof d> => !!d && d.kind === "ptz_camera")} />}
+          {floorLayer === "pressure" && (
               <div
                 className="flex items-center gap-3 px-4 py-1 text-xs text-slate-300"
                 role="status"
@@ -629,6 +641,7 @@ export default function App() {
               error={pressureError}
             />
           )}
+            {floorLayer === "pressure" && <SimulationProbePanel store={store} result={pressureResult} seatId={selectedSeat} onSeat={setSelectedSeat} showRays={showSimulationRays} onRays={setShowSimulationRays} />}
           <ScenarioPanel store={store} />
           {(mode === "camera" || mode === "display") && (
             <OpticalAnalysisPanel

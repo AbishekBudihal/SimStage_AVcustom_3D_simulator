@@ -9,7 +9,34 @@ export interface TableBounds {
   depth: number;
   height: number;
 }
+function corporateLayout(room: RoomSize) {
+  const tables: TableBounds[] = [], seats: { id: string; position: XYZ; rotation: number }[] = [];
+  const requested = room.capacity ?? 16;
+  const addSeat = (x: number, z: number, rotation = Math.PI) => {
+    if (seats.length < requested) seats.push({ id: `C${seats.length + 1}`, position: {x, y: eyeHeight(room), z}, rotation });
+  };
+  if (room.furnitureLayout === "theater") {
+    const columns = Math.max(1, Math.floor((room.width - 1.4) / .85));
+    const rows = Math.max(1, Math.floor((room.depth - 2) / 1.1));
+    for(let row=0;row<rows;row++) for(let col=0;col<columns;col++)
+      addSeat((col-(columns-1)/2)*.85, -room.depth/2+1.3+row*1.1);
+  } else {
+    if (room.width < 4.2 || room.depth < 4) return { tables, seats, tableWidth: 0, tableDepth: 0, tableHeight: .75 };
+    const sideX = room.width / 2 - 1.3, length = Math.max(.6, room.depth - 3);
+    for(const sign of [-1,1]) {
+      tables.push({x:sign*sideX,z:0,width:.6,depth:length,height:room.table?.height ?? .75});
+      const count=Math.max(1,Math.floor(length/.85));
+      for(let i=0;i<count;i++) addSeat(sign*(sideX+.55),(i-(count-1)/2)*.85,sign<0?Math.PI/2:-Math.PI/2);
+    }
+    const rearWidth=Math.max(.6,2*sideX-.6), rearZ=length/2+.3;
+    tables.push({x:0,z:rearZ,width:rearWidth,depth:.6,height:room.table?.height ?? .75});
+    const count=Math.max(1,Math.floor(rearWidth/.85));
+    for(let i=0;i<count;i++) addSeat((i-(count-1)/2)*.85,rearZ+.55);
+  }
+  return { tables, seats, tableWidth: tables[0]?.width ?? 0, tableDepth: tables[0]?.depth ?? 0, tableHeight: room.table?.height ?? .75 };
+}
 function generatedLayout(room: RoomSize) {
+  if (room.furnitureLayout) return corporateLayout(room);
   if (room.table) return customTableLayout(room);
   if (room.capacity !== undefined) return capacityLayout(room);
   const tableWidth = Math.min(1.6, room.width - 2.2),

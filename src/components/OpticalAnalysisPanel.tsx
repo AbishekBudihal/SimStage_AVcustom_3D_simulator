@@ -1,3 +1,5 @@
+import { displaySizing } from "../workspace/DisplaySizing";
+import { SimulationAccuracy } from "./SimulationAccuracy";
 import { useState } from "react";
 import { useStore } from "zustand";
 import type { DeviceStore } from "../workspace/DeviceStore";
@@ -20,6 +22,7 @@ export function OpticalAnalysisPanel({
   const devices = useStore(store.api, (s) => s.devices),
     catalog = useStore(store.api, (s) => s.catalog),
     room = useStore(store.api, (s) => s.room);
+  const engineering = useStore(store.api, s => s.engineering);
   const [error, setError] = useState("");
   const device = result ? devices[result.deviceId] : undefined,
     profile = catalog.find((p) => p.id === device?.catalogId);
@@ -32,9 +35,11 @@ export function OpticalAnalysisPanel({
     }
   };
   const seat = result?.seats.find((s) => s.id === selectedSeat);
+  const sizing = mode === "display" && device && seat ? displaySizing(device, seat.position, engineering, room.height) : null;
   return (
     <section className="optical-analysis">
       <h3>{mode === "camera" ? "Camera coverage" : "Display viewing"}</h3>
+      <SimulationAccuracy layer={mode} devices={device ? [device] : []} />
       <label>
         Analyze device
         <select
@@ -85,6 +90,10 @@ export function OpticalAnalysisPanel({
           <p>
             {device.metadata.label} · {device.surface} mount
           </p>
+          {mode === "display" && <label>Active image height (m)
+            <input aria-label="Display active image height" key={`${device.id}-${device.metadata.imageHeightM}`} type="number" min=".01" max={device.dimensions?.y ?? 30} step=".01" defaultValue={device.metadata.imageHeightM ?? ""} placeholder="Unknown"
+              onBlur={e=>apply(()=>{const value=e.target.valueAsNumber;if(!Number.isFinite(value)||value<=0||value>30)throw Error("Image height requires 0.01-30 m");if(device.dimensions && value>device.dimensions.y)throw Error("Active image height exceeds this hardware enclosure. Select a larger display from the catalog.");store.update(device.id,{metadata:{imageHeightM:value}});})} />
+          </label>}
           {mode === "camera" && (
             <p>
               HFOV {specificationText(result.hfov)}° · VFOV{" "}
@@ -177,7 +186,7 @@ export function OpticalAnalysisPanel({
           </p>
           <p className="muted fine-print">
             Green inside · red outside · gray unknown · amber within 10% of
-            viewing limit. No occlusion check.
+            viewing limit. Imported architecture is tested for direct-path obstruction; cones remain idealized.
           </p>
           <div className="seat-results">
             {result.seats.map((s) => (
@@ -193,6 +202,7 @@ export function OpticalAnalysisPanel({
           {seat && (
             <div role="status">
               <strong>{seat.id}</strong>
+              {sizing && <p>Required image height: {sizing.minimumHeight.toFixed(2)} m minimum; {sizing.maximumHeight.toFixed(2)} m maximum for vertical angle and floor/ceiling clearance. {sizing.reason}. {device?.dimensions && sizing.minimumHeight > device.dimensions.y ? " This requires a larger display than the current hardware enclosure." : ""} These are configured planning criteria, not full DISCAS certification.</p>}
               <p>
                 {seat.distance.toFixed(2)} m · H {seat.horizontal.toFixed(1)}° ·
                 V {seat.vertical.toFixed(1)}°
