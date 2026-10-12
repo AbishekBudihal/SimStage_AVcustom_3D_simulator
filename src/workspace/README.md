@@ -187,3 +187,14 @@ INSERT blocks, arcs, curved and tilted polylines remain unsupported and are repo
 export/explode those to straight architectural linework in CAD. PDF/images still
 require calibration and tracing. Existing AV device and connection identities stay
 in DeviceStore; imported spaces do not automatically remount equipment.
+
+
+### Live simulation inspection
+Speaker pressure maps expose a listener-seat probe with interpolated surface SPL and
+visible direct / first-bounce / blocked paths. These paths share the pressure model's
+table/rack and imported-geometry obstruction tests. Rectangular-room reflections are
+limited to first order; no diffraction or full wave/modal solver is claimed. Map
+sampling height and ray endpoint ear height are labeled separately. Display viewing
+provides a minimum image height from configured distance/content criteria and a
+maximum from vertical-angle / floor-ceiling clearance, with an editable placed-device
+image-height override. Source evidence becomes unverified when the value changes.

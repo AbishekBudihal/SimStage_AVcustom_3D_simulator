@@ -1,3 +1,4 @@
+import { SimulationRays } from "./SimulationRays";
 import {
   environmentGroup,
   disposeEnvironment,
@@ -110,6 +111,7 @@ export class CanvasManager {
   private fittedSpan = 1;
   private fitBounds: THREE.Box3 | undefined;
   private overlays: SpatialOverlays | undefined;
+  private simulationRays: SimulationRays | undefined;
   private pressureOverlay: PressureOverlay | undefined;
   private cameraLayers = new Map<string, SpatialOverlays>();
   private onWindowResize = () => this.resize();
@@ -607,6 +609,12 @@ export class CanvasManager {
     );
     this.invalidate();
   }
+  setSimulationProbe(state: DeviceState, point: XYZ | null) {
+    if (this.disposed) return;
+    if (!this.simulationRays && point) this.simulationRays = new SimulationRays(this.scene);
+    this.simulationRays?.update(state, point, state.pressure);
+    this.invalidate();
+  }
   setPressureMap(
     result: PressureResult | null,
     settings: PressureSettings,
@@ -825,6 +833,7 @@ export class CanvasManager {
     this.observer.disconnect();
     this.navigation?.dispose();
     if (this.environmentMesh) disposeEnvironment(this.environmentMesh);
+    this.simulationRays?.dispose();
     this.pressureOverlay?.dispose();
     this.overlays?.dispose();
     this.cameraLayers.forEach((layer) => layer.dispose());

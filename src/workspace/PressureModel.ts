@@ -179,6 +179,7 @@ export interface SoundPath {
   distance: number;
   direction: XYZ;
   reflected: boolean;
+  vertices: XYZ[];
 }
 export function soundPaths(
   source: XYZ,
@@ -204,6 +205,7 @@ export function soundPaths(
       distance: length(source, receiver),
       direction: direction(receiver),
       reflected: false,
+      vertices: [{ ...source }, { ...receiver }],
     });
   if (!reflections) return paths;
   const bounds = {
@@ -241,11 +243,12 @@ export function soundPaths(
         distance: length(source, bounce) + length(bounce, receiver),
         direction: direction(bounce),
         reflected: true,
+        vertices: [{ ...source }, { ...bounce }, { ...receiver }],
       });
     }
   return paths;
 }
-function obstacles(state: PressureInput): AcousticBox[] {
+export function acousticObstacles(state: PressureInput): AcousticBox[] {
   const tables = roomLayout(state.room).tables.map((t) => ({
     min: { x: t.x - t.width / 2, y: t.height - 0.075, z: t.z - t.depth / 2 },
     max: { x: t.x + t.width / 2, y: t.height, z: t.z + t.depth / 2 },
@@ -320,7 +323,7 @@ export function pressureMap(
     s.obstruction ? state.environment : null,
   );
   const bands = signalBands(s),
-    boxes = s.obstruction ? obstacles(state) : [];
+    boxes = s.obstruction ? acousticObstacles(state) : [];
   const all = Object.values(state.devices).filter(
     (d): d is PlacedDevice => !!d && d.kind === "speaker",
   );
